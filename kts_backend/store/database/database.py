@@ -23,7 +23,7 @@ class Database:
     async def connect(self, *_: list, **__: dict) -> None:
         self._db = db
         self._engine = create_async_engine(
-            "postgresql+asyncpg://gameadmin:123@localhost:5432/gamedatabase",
+            "postgresql+asyncpg://gameadmin:123@localhost:5432/svoyak",
             echo=True,
             future=True,
         )
