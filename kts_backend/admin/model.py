@@ -13,12 +13,16 @@ class Admin:
     email: str
     password: Optional[str] = None
 
-    def is_password_valid(self, password: str):
+    def is_password_valid(self, password: str) -> bool:
         return self.password == sha256(password.encode()).hexdigest()
 
     @classmethod
     def from_session(cls, session: Optional[dict]) -> Optional["Admin"]:
-        return cls(id=session["user"]["id"], email=session["user"]["email"])
+        if session:
+            return cls(
+                id=session["admin"]["id"], email=session["admin"]["email"]
+            )
+        return None
 
 
 class UserModel(db):
