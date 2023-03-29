@@ -1,8 +1,8 @@
-"""added models
+"""fixed models
 
-Revision ID: d5aefcda9130
+Revision ID: f2234e23dd17
 Revises: 
-Create Date: 2023-03-25 21:31:33.192473
+Create Date: 2023-03-29 02:47:55.732932
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "d5aefcda9130"
+revision = "f2234e23dd17"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -28,25 +28,29 @@ def upgrade() -> None:
     )
     op.create_table(
         "player",
-        sa.Column("tg_id", sa.Integer(), nullable=False),
+        sa.Column("tg_id", sa.BigInteger(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("username", sa.String(), nullable=True),
+        sa.Column("games_count", sa.Integer(), nullable=False),
+        sa.Column("win_count", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("tg_id"),
         sa.UniqueConstraint("tg_id"),
     )
     op.create_table(
         "game",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("chat_id", sa.Integer(), nullable=False),
-        sa.Column("state", sa.Integer(), nullable=False),
+        sa.Column("chat_id", sa.BigInteger(), nullable=False),
+        sa.Column("state", sa.String(), nullable=False),
         sa.Column("round", sa.Integer(), nullable=False),
-        sa.Column("winner", sa.Integer(), nullable=True),
+        sa.Column("winner_id", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("ended_at", sa.DateTime(), nullable=True),
         sa.Column(
-            "RemainingQuestions", postgresql.ARRAY(sa.Integer()), nullable=True
+            "remaining_questions", postgresql.ARRAY(sa.Integer()), nullable=True
         ),
-        sa.ForeignKeyConstraint(["winner"], ["admin.id"], ondelete="cascade"),
+        sa.ForeignKeyConstraint(
+            ["winner_id"], ["player.tg_id"], ondelete="cascade"
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -54,21 +58,21 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), nullable=True),
-        sa.Column("admin", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["admin"], ["admin.id"], ondelete="cascade"),
+        sa.Column("admin_id", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(["admin_id"], ["admin.id"], ondelete="cascade"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
         "gamescore",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("player", sa.Integer(), nullable=False),
-        sa.Column("game", sa.Integer(), nullable=False),
+        sa.Column("player_id", sa.BigInteger(), nullable=False),
+        sa.Column("game_id", sa.Integer(), nullable=False),
         sa.Column("score", sa.Integer(), nullable=False),
         sa.Column("right_answers", sa.Integer(), nullable=False),
         sa.Column("wrong_answers", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["game"], ["game.id"], ondelete="cascade"),
+        sa.ForeignKeyConstraint(["game_id"], ["game.id"], ondelete="cascade"),
         sa.ForeignKeyConstraint(
-            ["player"], ["player.tg_id"], ondelete="cascade"
+            ["player_id"], ["player.tg_id"], ondelete="cascade"
         ),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -76,9 +80,9 @@ def upgrade() -> None:
         "round",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("number", sa.Integer(), nullable=False),
-        sa.Column("pack", sa.Integer(), nullable=False),
+        sa.Column("pack_id", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["pack"], ["questionpack.id"], ondelete="cascade"
+            ["pack_id"], ["questionpack.id"], ondelete="cascade"
         ),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -86,8 +90,8 @@ def upgrade() -> None:
         "theme",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("name", sa.String(), nullable=False),
-        sa.Column("round", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["round"], ["round.id"], ondelete="cascade"),
+        sa.Column("round_id", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(["round_id"], ["round.id"], ondelete="cascade"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -95,18 +99,18 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), nullable=True),
-        sa.Column("theme", sa.Integer(), nullable=False),
+        sa.Column("theme_id", sa.Integer(), nullable=False),
         sa.Column("cost", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["theme"], ["theme.id"], ondelete="cascade"),
+        sa.ForeignKeyConstraint(["theme_id"], ["theme.id"], ondelete="cascade"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
         "answers",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("question", sa.Integer(), nullable=False),
+        sa.Column("question_id", sa.Integer(), nullable=False),
         sa.Column("text", sa.String(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["question"], ["question.id"], ondelete="cascade"
+            ["question_id"], ["question.id"], ondelete="cascade"
         ),
         sa.PrimaryKeyConstraint("id"),
     )

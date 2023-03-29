@@ -54,13 +54,13 @@ class PlayerDC:
 @dataclass
 class GameDC:
     id: int
-    state: Enum
+    state: str
     created_at: datetime
     chat_id: int
     round: int
     winner_id: Optional[int]
     ended_at: Optional[datetime] = None
-    remaining_questions: Optional[list[QuestionDC]] = None
+    remaining_questions: Optional[list[int]] = None
 
 
 @dataclass

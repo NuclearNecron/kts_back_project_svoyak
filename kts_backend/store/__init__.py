@@ -11,9 +11,9 @@ if typing.TYPE_CHECKING:
 
 class Store:
     def __init__(self, app: "Application"):
-        from kts_backend.store.admin.accessor import UserAccessor
+        from kts_backend.store.admin.accessor import AdminAccessor
 
-        # self.user = UserAccessor(app)
+        self.admin = AdminAccessor(app)
         self.work_queue = Queue()
         self.send_queue = Queue()
         self.tgapi = TGApi(app, app.config.tgbot.token)

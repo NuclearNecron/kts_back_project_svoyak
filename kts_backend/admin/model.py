@@ -25,7 +25,7 @@ class Admin:
         return None
 
 
-class UserModel(db):
+class AdminModel(db):
     __tablename__ = "admin"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

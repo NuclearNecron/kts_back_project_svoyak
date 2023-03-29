@@ -1,35 +1,45 @@
-# from dataclasses import asdict
-# from datetime import datetime
-# from typing import Dict
-#
-# import sqlalchemy.exc
-# from sqlalchemy import select, desc, update
-# from sqlalchemy.orm import selectinload
-#
-# from kts_backend.base.base_accessor import BaseAccessor
-#
-# from kts_backend.game.models import (
-#     PlayerModel,
-#     GameScoreModel,
-#     GameModel,
-#     PlayerDC,
-#     GameDC,
-#     GameScoreDC,
-# )
-#
-#
-# class GameAccessor(BaseAccessor):
-#     async def create_player(self, player: PlayerDC) -> PlayerDC | None:
-#
-#         try:
-#             async with self.app.database.session() as session:
-#                 new_player = PlayerModel(**asdict(player))
-#                 session.add(new_player)
-#                 await session.commit()
-#                 return new_player.to_dc()
-#         except sqlalchemy.exc.IntegrityError:
-#             return None
-#
+from dataclasses import asdict
+from datetime import datetime
+from typing import Dict, Optional
+
+import sqlalchemy.exc
+from sqlalchemy import select, desc, update
+from sqlalchemy.orm import selectinload
+
+from kts_backend.base.base_accessor import BaseAccessor
+from kts_backend.game.dataclasses import QuestionPackDC, PlayerDC
+
+from kts_backend.game.models import (
+    PlayerModel,
+    GameScoreModel,
+    GameModel, QuestionPackModel
+)
+
+
+class GameAccessor(BaseAccessor):
+    async def create_pack(self,name:str, admin:int,description:Optional[str])->QuestionPackDC | None:
+        try:
+            async with self.app.database.session() as session:
+                if description:
+                    new_pack = QuestionPackModel(name=name, admin_id=admin, description=description)
+                else:
+                    new_pack = QuestionPackModel(name=name, admin_id=admin)
+                session.add(new_pack)
+                await session.commit()
+                return new_pack.to_dc()
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def create_player(self, player: PlayerDC) -> PlayerDC | None:
+        try:
+            async with self.app.database.session() as session:
+                new_player = PlayerModel(**asdict(player))
+                session.add(new_player)
+                await session.commit()
+                return new_player.to_dc()
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
 #     async def create_game(
 #         self, chat_id: int, created_at: datetime
 #     ) -> GameDC | None:

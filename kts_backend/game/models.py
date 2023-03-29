@@ -57,6 +57,8 @@ class PlayerModel(db):
             tg_id=self.tg_id,
             name=self.name,
             username=self.username,
+            games_count = self.games_count,
+            win_count= self.win_count,
         )
 
 
@@ -162,7 +164,7 @@ class GameModel(db):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     chat_id = Column(BigInteger, nullable=False)
-    state = Column(Enum, nullable=False)
+    state = Column(String, nullable=False)
     round = Column(Integer, nullable=False)
     winner_id = Column(
         Integer, ForeignKey("player.tg_id", ondelete="cascade"), nullable=True
