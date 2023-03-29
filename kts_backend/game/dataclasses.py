@@ -58,9 +58,13 @@ class GameDC:
     created_at: datetime
     chat_id: int
     round: int
+    answer_time: int
     winner_id: Optional[int]
     ended_at: Optional[datetime] = None
     remaining_questions: Optional[list[int]] = None
+    answering_player_tg_id: Optional[int] = None
+
+
 
 
 @dataclass

@@ -27,9 +27,13 @@ class GameScoreModel(db):
     game_id = Column(
         Integer, ForeignKey("game.id", ondelete="cascade"), nullable=False
     )
-    score = Column(Integer, nullable=False)
-    right_answers = Column(Integer, nullable=False)
-    wrong_answers = Column(Integer, nullable=False)
+    score = Column(Integer,server_default="0", nullable=False)
+    right_answers = Column(Integer,server_default="0", nullable=False)
+    wrong_answers = Column(Integer,server_default="0", nullable=False)
+
+    player = relationship("PlayerModel", back_populates="score",foreign_keys="GameScoreModel.player_id")
+    game = relationship("GameModel", back_populates="score",foreign_keys="GameScoreModel.game_id")
+
 
     def to_dc(self) -> GameScoreDC:
         return GameScoreDC(
@@ -48,9 +52,10 @@ class PlayerModel(db):
     tg_id = Column(BigInteger, primary_key=True, unique=True)
     name = Column(String, nullable=False)
     username = Column(String, nullable=True)
-    scores = relationship(GameScoreModel, backref="player")
     games_count = Column(Integer, nullable=False)
     win_count = Column(Integer, nullable=False)
+
+    score = relationship("GameScoreModel", back_populates="player",foreign_keys="GameScoreModel.player_id",)
 
     def to_dc(self) -> PlayerDC:
         return PlayerDC(
@@ -71,6 +76,8 @@ class AnswersModel(db):
     )
     text = Column(String, nullable=False)
 
+    question = relationship("QuestionModel", back_populates="answers")
+
     def to_dc(self) -> AnswersDC:
         return AnswersDC(
             id=self.id,
@@ -89,7 +96,9 @@ class QuestionModel(db):
         Integer, ForeignKey("theme.id", ondelete="cascade"), nullable=False
     )
     cost = Column(Integer, nullable=False)
-    answers = relationship(AnswersModel, backref="question")
+
+    answers = relationship("AnswersModel", back_populates="question")
+    theme = relationship("ThemeModel", back_populates="questions")
 
     def to_dc(self) -> QuestionDC:
         return QuestionDC(
@@ -109,7 +118,9 @@ class ThemeModel(db):
     round_id = Column(
         Integer, ForeignKey("round.id", ondelete="cascade"), nullable=False
     )
-    questions = relationship(QuestionModel, backref="theme")
+
+    questions = relationship(QuestionModel, back_populates="theme")
+    round = relationship("RoundModel", back_populates="themes")
 
     def to_dc(self) -> ThemeDC:
         return ThemeDC(
@@ -129,7 +140,9 @@ class RoundModel(db):
         ForeignKey("questionpack.id", ondelete="cascade"),
         nullable=False,
     )
-    themes = relationship(ThemeModel, backref="round")
+
+    themes = relationship(ThemeModel, back_populates="round")
+    pack = relationship("QuestionPackModel", back_populates="rounds")
 
     def to_dc(self) -> RoundDC:
         return RoundDC(
@@ -148,7 +161,9 @@ class QuestionPackModel(db):
     admin_id = Column(
         Integer, ForeignKey("admin.id", ondelete="cascade"), nullable=False
     )
-    rounds = relationship(RoundModel, backref="questionpack")
+
+    rounds = relationship(RoundModel, back_populates="pack")
+    author = relationship("AdminModel", back_populates="pack")
 
     def to_dc(self) -> QuestionPackDC:
         return QuestionPackDC(
@@ -167,12 +182,19 @@ class GameModel(db):
     state = Column(String, nullable=False)
     round = Column(Integer, nullable=False)
     winner_id = Column(
-        Integer, ForeignKey("player.tg_id", ondelete="cascade"), nullable=True
+        Integer, ForeignKey("player.tg_id", ondelete="SET NULL"), nullable=True
     )
     created_at = Column(DateTime, nullable=False)
     ended_at = Column(DateTime, nullable=True)
     remaining_questions = Column(ARRAY(Integer))
-    playerscores = relationship(GameScoreModel, backref="game")
+    answering_player_tg_id = Column(
+        BigInteger,
+        ForeignKey("player.tg_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    answer_time = Column(Integer, nullable=False, server_default="15")
+
+    score = relationship("GameScoreModel", back_populates="game", foreign_keys="GameScoreModel.game_id")
 
     def to_dc(self) -> GameDC:
         return GameDC(
@@ -183,4 +205,7 @@ class GameModel(db):
             chat_id=self.chat_id,
             round=self.round,
             winner_id=self.winner_id,
+            remaining_questions=self.remaining_questions,
+            answering_player_tg_id=self.answering_player_tg_id,
+            answer_time=self.answer_time
         )

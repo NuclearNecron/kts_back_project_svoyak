@@ -5,12 +5,12 @@ import typing
 import asyncio
 
 if typing.TYPE_CHECKING:
-    from kts_backend.store import Store
+    from kts_backend.web.app import Application
 
 
 class Poller:
-    def __init__(self, store: "Store"):
-        self.store = store
+    def __init__(self, app: "Application"):
+        self.app = app
         self.is_running = False
         self.poll_task: Optional[Task] = None
 
@@ -26,15 +26,15 @@ class Poller:
         offset = 0
         while self.is_running:
             print("poll")
-            results = await self.store.tgapi.poll(offset, timeout=20)
+            results = await self.app.store.tgapi.poll(offset, timeout=20)
             for result in results:
                 print(type(result))
                 offset = result.update_id + 1
                 try:
                     print("added ", result.update_id)
-                    await self.store.work_queue.put(result)
+                    await self.app.store.work_queue.put(result)
                 except Exception as inst:
-                    print(type(inst))  # the exception instance
+                    self(type(inst))  # the exception instance
                     print(inst.args)  # arguments stored in .args
                     print(inst)
                 finally:

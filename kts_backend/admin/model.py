@@ -3,6 +3,7 @@ from hashlib import sha256
 from typing import Optional
 
 from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import relationship
 
 from kts_backend.store.database.database import db
 
@@ -31,3 +32,5 @@ class AdminModel(db):
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=True)
+
+    pack = relationship("QuestionPackModel", back_populates="author")

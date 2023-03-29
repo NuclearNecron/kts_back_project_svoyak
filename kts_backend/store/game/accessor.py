@@ -7,7 +7,7 @@ from sqlalchemy import select, desc, update
 from sqlalchemy.orm import selectinload
 
 from kts_backend.base.base_accessor import BaseAccessor
-from kts_backend.game.dataclasses import QuestionPackDC, PlayerDC
+from kts_backend.game.dataclasses import QuestionPackDC, PlayerDC, RoundDC
 
 from kts_backend.game.models import (
     PlayerModel,
@@ -17,13 +17,10 @@ from kts_backend.game.models import (
 
 
 class GameAccessor(BaseAccessor):
-    async def create_pack(self,name:str, admin:int,description:Optional[str])->QuestionPackDC | None:
+    async def create_pack(self,name:str, admin:int,description:Optional[str]=None)->QuestionPackDC | None:
         try:
             async with self.app.database.session() as session:
-                if description:
-                    new_pack = QuestionPackModel(name=name, admin_id=admin, description=description)
-                else:
-                    new_pack = QuestionPackModel(name=name, admin_id=admin)
+                new_pack = QuestionPackModel(name=name, admin_id=admin, description=description)
                 session.add(new_pack)
                 await session.commit()
                 return new_pack.to_dc()
@@ -37,6 +34,16 @@ class GameAccessor(BaseAccessor):
                 session.add(new_player)
                 await session.commit()
                 return new_player.to_dc()
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def create_round(self, number: str, pack: int) -> RoundDC | None:
+        try:
+            async with self.app.database.session() as session:
+                new_pack = QuestionPackModel(name=name, admin_id=admin, description=description)
+                session.add(new_pack)
+                await session.commit()
+                return new_pack.to_dc()
         except sqlalchemy.exc.IntegrityError:
             return None
 
