@@ -9,7 +9,7 @@ class QuestionPackDC:
     id: int
     name: str
     admin_id: int
-    description: Optional[str] = None
+    description: str | None
 
 
 @dataclass
@@ -24,6 +24,7 @@ class ThemeDC:
     id: int
     round_id: int
     name: str
+    description: str | None
 
 
 @dataclass
@@ -32,7 +33,6 @@ class QuestionDC:
     name: str
     theme_id: int
     cost: int
-    description: Optional[str] = None
 
 
 @dataclass
@@ -48,7 +48,7 @@ class PlayerDC:
     name: str
     games_count: int
     win_count: int
-    username: Optional[str] = None
+    username: str | None
 
 
 @dataclass
@@ -59,12 +59,12 @@ class GameDC:
     chat_id: int
     round: int
     answer_time: int
-    winner_id: Optional[int]
-    ended_at: Optional[datetime] = None
-    remaining_questions: Optional[list[int]] = None
-    answering_player_tg_id: Optional[int] = None
-
-
+    pack: int | None
+    winner_id: int | None
+    ended_at: datetime | None
+    remaining_questions: list[int] | None
+    answering_player_tg_id: int | None
+    creator: int | None
 
 
 @dataclass
@@ -84,3 +84,9 @@ class GameState(Enum):
     QUESTION_SELECT = "QUESTION_SELECT"
     QUESTION_ANSWERING = "QUESTION_ANSWERING"
     FINISH = "FINISH"
+
+
+@dataclass
+class GameTheme:
+    theme: ThemeDC
+    questions: list[QuestionDC] | None
