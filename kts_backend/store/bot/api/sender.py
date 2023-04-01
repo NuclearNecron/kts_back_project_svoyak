@@ -16,6 +16,7 @@ class Sender:
 
     async def start(self):
         self.is_running = True
+        self.app.logger.info(f"SENDER. Инициализация отправщика")
         self.send_task = asyncio.create_task(self.send())
 
     async def stop(self):
@@ -29,5 +30,9 @@ class Sender:
             try:
                 self.app.logger.info(f"SENDER. Отправляю сообщение {message}")
                 await self.app.store.tgapi.send_message(message)
+            except Exception as inst:
+                self.app.logger.error(
+                    "Sender: Была получена ошибка:", exc_info=inst
+                )
             finally:
                 self.app.store.send_queue.task_done()

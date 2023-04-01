@@ -109,8 +109,9 @@ class GameAccessor(BaseAccessor):
                     .limit(1)
                 )
                 res = await session.scalars(query)
-                if res.one_or_none():
-                    return res.one_or_none().to_dc()
+                result = res.one_or_none()
+                if result:
+                    return result.to_dc()
                 else:
                     return None
         except sqlalchemy.exc.IntegrityError:
@@ -125,17 +126,22 @@ class GameAccessor(BaseAccessor):
         current_game = await self.return_current_game(chat_id=chat_id)
         if current_game is None:
             try:
-                async with self.app.database.session() as session:
-                    new_game = GameModel(
-                        chat_id=chat_id,
-                        created_at=created_at,
-                        state=str(GameState.GAME_INITIALZATION.value),
-                        round=1,
-                        creator=player_id,
-                    )
-                    session.add(new_game)
-                    await session.commit()
-                    return new_game.to_dc()
+                try:
+                    async with self.app.database.session() as session:
+                        new_game = GameModel(
+                            chat_id=chat_id,
+                            created_at=created_at,
+                            state=str(GameState.GAME_INITIALZATION.value),
+                            round=1,
+                            creator=player_id,
+                        )
+                        session.add(new_game)
+                        await session.commit()
+                        return new_game.to_dc()
+                except Exception as inst:
+                    print(type(inst))  # the exception instance
+                    print(inst.args)  # arguments stored in .args
+                    print(inst)
             except sqlalchemy.exc.IntegrityError:
                 return None
 
@@ -149,6 +155,7 @@ class GameAccessor(BaseAccessor):
                 )
                 session.add(new_player)
                 await session.commit()
+                print(new_player.to_dc())
                 return new_player.to_dc()
         except sqlalchemy.exc.IntegrityError:
             return None
@@ -157,8 +164,9 @@ class GameAccessor(BaseAccessor):
         async with self.app.database.session() as session:
             query = select(PlayerModel).where(PlayerModel.tg_id == tg_id)
             res = await session.scalars(query)
-            if res.one_or_none():
-                return res.one_or_none().to_dc()
+            answer=res.one_or_none()
+            if answer:
+                return answer.to_dc()
             else:
                 return None
 
@@ -186,8 +194,9 @@ class GameAccessor(BaseAccessor):
                     & (GameScoreModel.game_id == game_id)
                 )
                 get_res = await session.scalars(get_query)
-                if get_res.one_or_none():
-                    res = get_res.one_or_none().to_dc()
+                answer1 = get_res.one_or_none()
+                if answer1:
+                    res = answer1.to_dc()
                     if is_correct:
                         upd_query = (
                             update(GameScoreModel)
@@ -242,23 +251,27 @@ class GameAccessor(BaseAccessor):
                     .order_by(desc(GameScoreModel.score))
                 )
                 res = await session.scalars(query)
-                if res.all():
-                    return [score.to_dc() for score in res.all()]
+                results = res.all()
+                if results:
+                    return [score.to_dc() for score in results]
                 else:
                     return None
         except sqlalchemy.exc.IntegrityError:
             return None
 
-    async def get_player_score(self, game_id: int,player_id:int) -> list[GameScoreDC] | None:
+    async def get_player_score(
+        self, game_id: int, player_id: int
+    ) -> list[GameScoreDC] | None:
         try:
             async with self.app.database.session() as session:
-                query = (
-                    select(GameScoreModel)
-                    .where((GameScoreModel.game_id == game_id)&(GameScoreModel.player_id==player_id))
+                query = select(GameScoreModel).where(
+                    (GameScoreModel.game_id == game_id)
+                    & (GameScoreModel.player_id == player_id)
                 )
                 res = await session.scalars(query)
-                if res.one_or_none():
-                    return res.one_or_none().to_dc()
+                result  = res.one_or_none()
+                if result:
+                    return result.to_dc()
                 else:
                     return None
         except sqlalchemy.exc.IntegrityError:
@@ -268,7 +281,7 @@ class GameAccessor(BaseAccessor):
         try:
             async with self.app.database.session() as session:
                 query = (
-                    select(func.count)
+                    select(func.count())
                     .select_from(GameScoreModel)
                     .where(GameScoreModel.game_id == game_id)
                 )
@@ -282,7 +295,7 @@ class GameAccessor(BaseAccessor):
             async with self.app.database.session() as session:
                 query = (
                     select(QuestionPackModel)
-                    .where(QuestionPackModel.id == func.random())
+                    .order_by(func.random())
                     .limit(1)
                 )
                 res = await session.scalars(query)
@@ -369,8 +382,9 @@ class GameAccessor(BaseAccessor):
                     QuestionModel.id == question_id
                 )
                 res = await session.scalars(query)
-                if res.one_or_none():
-                    return res.one_or_none().to_dc()
+                result =res.one_or_none()
+                if result:
+                    return result.to_dc()
                 else:
                     return None
         except sqlalchemy.exc.IntegrityError:
@@ -397,9 +411,7 @@ class GameAccessor(BaseAccessor):
                             select(ThemeModel)
                             .where(ThemeModel.round_id == roundres.id)
                             .options(
-                                selectinload(ThemeModel.questions).order_by(
-                                    ThemeModel.questions.cost
-                                )
+                                selectinload(ThemeModel.questions)
                             )
                         )
                         result = await session.scalars(question_query)

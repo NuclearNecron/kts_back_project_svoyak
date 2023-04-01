@@ -10,7 +10,9 @@ from kts_backend.store.bot.api.dataclasses import (
     CallbackQueryUpdate,
     MessageUpdate,
     InlineKeyboardMarkup,
-    InlineKeyboardButton, MessageEntity, MessageToSend,
+    InlineKeyboardButton,
+    MessageEntity,
+    MessageToSend,
 )
 
 if typing.TYPE_CHECKING:
@@ -36,19 +38,23 @@ class Updater:
         STARTGAME = "/startgame"
         PARTICIPATE = "/participate"
         FINISHGAME = "/finishgame"
-        GAMESTATS = "/ganestats"
+        GAMESTATS = "/gamestats"
         LEFTGAME = "/leftgame"
 
     async def handle_update(self):
         while self.is_running:
             message = await self.app.store.work_queue.get()
             try:
+                self.app.logger.info(f"Manager: Новое сообщение {message}")
                 if type(message) is CallbackQueryUpdate:
                     await self.handle_callbackquery(message)
                 elif type(message) is MessageUpdate:
                     await self.handle_message(message)
+            except Exception as inst:
+                self.app.logger.error(
+                    "Manager: Была получена ошибка:", exc_info=inst
+                )
             finally:
-                print("moved to send")
                 self.app.store.work_queue.task_done()
 
     async def handle_message(self, message: MessageUpdate):
@@ -75,10 +81,20 @@ class Updater:
                 await self.handle_wrong_command(message)
 
     async def handle_start_game(self, message: MessageUpdate):
+        player = await self.app.store.game.get_player_by_id(
+            message.message.from_user.id
+        )
+        if player == None:
+            await self.app.store.game.create_player(
+                tg_id=message.message.from_user.id,
+                name=message.message.from_user.first_name,
+                username=message.message.from_user.username,
+            )
         new_game = await self.app.store.game.create_game(
             chat_id=message.message.chat.id,
             player_id=message.message.from_user.id,
         )
+        self.app.logger.info(f"Manager: Текущая игра:{new_game} ")
         if new_game:
             await self.handle_to_queue(
                 chat_id=message.message.chat.id,
@@ -172,6 +188,9 @@ class Updater:
                 text=f"Игра была отменена из-за нехватки участникв.",
             )
         else:
+            await self.app.store.game.change_game_status(
+                game_id, GameState.START.value
+            )
             await self.app.store.game.get_random_pack(game_id)
             questionres = await self.app.store.game.get_round(game_id)
             inline_keyboard = InlineKeyboardMarkup(
@@ -179,7 +198,7 @@ class Updater:
                     [
                         InlineKeyboardButton(
                             text=theme.theme.name,
-                            callback_data=f"Описание темы: {theme.theme.description if theme.theme.description else 'Описание отсутствует'}.",
+                            callback_data=f"""Описание темы: {theme.theme.description if theme.theme.description else "Нет описания"}.""",
                         )
                     ]
                     + [
@@ -195,12 +214,15 @@ class Updater:
             for theme in questionres:
                 for question in theme.questions:
                     question_list.append(question.id)
-            await self.app.store.game.dump_question(question_list)
+            await self.app.store.game.dump_question(game_id=game_id,questions=question_list)
             data = await self.app.store.tgapi.send_inline_keyboard(
                 inline_keyboard=inline_keyboard,
                 chat_id=chat_id,
                 message_thread_id=message_thread_id,
                 text="Вопросы для выбора",
+            )
+            await self.app.store.game.change_game_status(
+                game_id, GameState.QUESTION_SELECT.value
             )
             answering = await self.app.store.game.set_answering(
                 game_id=game_id, player_id=owner_id
@@ -218,49 +240,50 @@ class Updater:
                     text=f"Не удалось выбрать отвечающего игрока. УВЫ. Перезапустите игру.",
                 )
 
-
-    async def handle_game_stat(self,message:MessageUpdate):
-        #todo сделать таблицу лидеров.
+    async def handle_game_stat(self, message: MessageUpdate):
+        # todo сделать таблицу лидеров.
         await self.handle_to_queue(
             chat_id=message.message.chat.id,
             message_thread_id=message.message.message_thread_id,
             text=f"Метод не имплементирован в проект еще.",
         )
 
-    async def handle_leave(self,message:MessageUpdate):
+    async def handle_leave(self, message: MessageUpdate):
         game = await self.app.store.game.return_current_game(
             message.message.chat.id
         )
         if game:
-                player = await self.app.store.game.get_player_by_id(
-                    message.message.from_user.id
+            player = await self.app.store.game.get_player_by_id(
+                message.message.from_user.id
+            )
+            if player:
+                player_score = await self.app.store.game.get_player_score(
+                    player_id=message.message.from_user.id, game_id=game.id
                 )
-                if player:
-                    player_score = await self.app.store.game.get_player_score(
-                        player_id=message.message.from_user.id, game_id=game.id
+                if player_score:
+                    await self.app.store.game.delete_player_from_game(
+                        game_id=game.id, player_id=message.message.from_user.id
                     )
-                    if player_score:
-                        await self.app.store.game.delete_player_from_game(game_id=game.id,player_id=message.message.from_user.id)
-                        await self.handle_to_queue(
-                            chat_id=message.message.chat.id,
-                            message_thread_id=message.message.message_thread_id,
-                            reply_to_message_id=message.message.message_id,
-                            text=f"Игрок {message.message.from_user.username if message.message.from_user.username else message.message.from_user.first_name} покинул игру.",
-                        )
-                    else:
-                        await self.handle_to_queue(
-                            chat_id=message.message.chat.id,
-                            message_thread_id=message.message.message_thread_id,
-                            reply_to_message_id=message.message.message_id,
-                            text=f"Вы не можете покинуть игру, так как не учавтсвуете в ней",
-                        )
-                else:
-                    await  self.handle_to_queue(
+                    await self.handle_to_queue(
                         chat_id=message.message.chat.id,
                         message_thread_id=message.message.message_thread_id,
                         reply_to_message_id=message.message.message_id,
-                        text=f"Вы не можете покинуть игру так как объект вашего пользователля не был создан, для его получения, поучавствуйте в игре хотя бы раз.",
+                        text=f"Игрок {message.message.from_user.username if message.message.from_user.username else message.message.from_user.first_name} покинул игру.",
                     )
+                else:
+                    await self.handle_to_queue(
+                        chat_id=message.message.chat.id,
+                        message_thread_id=message.message.message_thread_id,
+                        reply_to_message_id=message.message.message_id,
+                        text=f"Вы не можете покинуть игру, так как не учавтсвуете в ней",
+                    )
+            else:
+                await self.handle_to_queue(
+                    chat_id=message.message.chat.id,
+                    message_thread_id=message.message.message_thread_id,
+                    reply_to_message_id=message.message.message_id,
+                    text=f"Вы не можете покинуть игру так как объект вашего пользователля не был создан, для его получения, поучавствуйте в игре хотя бы раз.",
+                )
         else:
             await self.handle_to_queue(
                 chat_id=message.message.chat.id,
@@ -269,20 +292,26 @@ class Updater:
                 text=f"В данный момент в чате не проходит ни одной игры!",
             )
 
-    async def handle_manual_finish_game(self,message:MessageUpdate):
+    async def handle_manual_finish_game(self, message: MessageUpdate):
         game = await self.app.store.game.return_current_game(
             message.message.chat.id
         )
         if game:
             if game.creator == message.message.from_user.id:
+                await self.handle_to_queue(
+                    chat_id=message.message.chat.id,
+                    message_thread_id=message.message.message_thread_id,
+                    reply_to_message_id=message.message.message_id,
+                    text=f"Вы завершили игру вручную",
+                )
                 await self.handle_finish_game(game_id=game.id)
             else:
-                    await  self.handle_to_queue(
-                        chat_id=message.message.chat.id,
-                        message_thread_id=message.message.message_thread_id,
-                        reply_to_message_id=message.message.message_id,
-                        text=f"Вы не можете завершить игру, так как не являетесь её создателем",
-                    )
+                await self.handle_to_queue(
+                    chat_id=message.message.chat.id,
+                    message_thread_id=message.message.message_thread_id,
+                    reply_to_message_id=message.message.message_id,
+                    text=f"Вы не можете завершить игру, так как не являетесь её создателем",
+                )
         else:
             await self.handle_to_queue(
                 chat_id=message.message.chat.id,
@@ -291,43 +320,58 @@ class Updater:
                 text=f"В данный момент в чате не проходит ни одной игры!",
             )
 
-    async def handle_finish_game(self, game_id:int):
-        await self.app.store.game.dump_question(game_id=game_id,questions=[])
-        await self.app.store.game.change_game_status(game_id=game_id,status=GameState.FINISH.value)
+    async def handle_finish_game(self, game_id: int):
+        await self.app.store.game.dump_question(game_id=game_id, questions=[])
+        await self.app.store.game.change_game_status(
+            game_id=game_id, status=GameState.FINISH.value
+        )
         # TO DO Сделать постановку победителя и вызов статистики
 
-    async def handle_wrong_command(self,message:MessageUpdate):
+    async def handle_wrong_command(self, message: MessageUpdate):
         await self.handle_to_queue(
-                chat_id=message.message.chat.id,
-                message_thread_id=message.message.message_thread_id,
-                reply_to_message_id=message.message.message_id,
-                text=f"Такой команды не существует",
-            )
+            chat_id=message.message.chat.id,
+            message_thread_id=message.message.message_thread_id,
+            reply_to_message_id=message.message.message_id,
+            text=f"Такой команды не существует",
+        )
 
-
-    async def handle_text_message(self,message:MessageUpdate):
+    async def handle_text_message(self, message: MessageUpdate):
         await self.handle_to_queue(
             chat_id=message.message.chat.id,
             message_thread_id=message.message.message_thread_id,
             text=f"Метод не имплементирован в проект еще.",
         )
-    async def handle_callbackquery(self,message:MessageUpdate):
+
+    async def handle_callbackquery(self, message: CallbackQueryUpdate):
         await self.handle_to_queue(
-            chat_id=message.message.chat.id,
-            message_thread_id=message.message.message_thread_id,
+            chat_id=message.callback_query.message.chat.id,
+            message_thread_id=message.callback_query.message.message_thread_id,
             text=f"Метод не имплементирован в проект еще.",
         )
+
+
     async def handle_to_queue(
-            self,
-            chat_id: int,
-            text: str,
-            message_thread_id: int | None = None,
-            parse_mode: str | None = None,
-            entities: typing.List[MessageEntity] | None = None,
-            disable_notification: bool | None = None,
-            reply_to_message_id: int | None = None,
-            reply_markup: InlineKeyboardMarkup | None = None
+        self,
+        chat_id: int,
+        text: str,
+        message_thread_id: int | None = None,
+        parse_mode: str | None = None,
+        entities: typing.List[MessageEntity] | None = None,
+        disable_notification: bool | None = None,
+        reply_to_message_id: int | None = None,
+        reply_markup: InlineKeyboardMarkup | None = None,
     ) -> None:
+        new_message = MessageToSend(
+                chat_id=chat_id,
+                message_thread_id=message_thread_id,
+                text=text,
+                parse_mode=parse_mode,
+                entities=entities,
+                disable_notification=disable_notification,
+                reply_to_message_id=reply_to_message_id,
+                reply_markup=reply_markup,
+            )
+        print(new_message)
         await self.app.store.send_queue.put(
             MessageToSend(
                 chat_id=chat_id,
@@ -340,4 +384,3 @@ class Updater:
                 reply_markup=reply_markup,
             )
         )
-

@@ -18,6 +18,7 @@ from kts_backend.store.database.database import db
 
 class GameScoreModel(db):
     __tablename__ = "gamescore"
+    __mapper_args__ = {"eager_defaults": True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     player_id = Column(
@@ -60,6 +61,7 @@ class GameScoreModel(db):
 
 class PlayerModel(db):
     __tablename__ = "player"
+    __mapper_args__ = {"eager_defaults": True}
 
     tg_id = Column(BigInteger, primary_key=True, unique=True)
     name = Column(String, nullable=False)
@@ -134,7 +136,7 @@ class ThemeModel(db):
     )
     description = Column(String, nullable=True)
 
-    questions = relationship(QuestionModel, back_populates="theme")
+    questions = relationship(QuestionModel, back_populates="theme",order_by = "QuestionModel.cost")
     round = relationship("RoundModel", back_populates="themes")
 
     __table_args__ = (
@@ -203,6 +205,7 @@ class QuestionPackModel(db):
 
 class GameModel(db):
     __tablename__ = "game"
+    __mapper_args__ = {"eager_defaults": True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     chat_id = Column(BigInteger, nullable=False)

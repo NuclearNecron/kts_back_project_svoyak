@@ -34,7 +34,7 @@ class TGApi(BaseAccessor):
         self.poller = Poller(self.app)
         self.token = self.app.config.tgbot.token
         await self.poller.start()
-        self.sender = Sender(self.app.store)
+        self.sender = Sender(self.app)
         await self.sender.start()
 
     async def disconnect(self, app: "Application"):
@@ -58,6 +58,7 @@ class TGApi(BaseAccessor):
             url += "&reply_markup=" + json.dumps(params["reply_markup"])
         if "allowed_updates" in params and len(params["allowed_updates"]) > 0:
             url += "&allowed_updates=" + ",".join(params["allowed_updates"])
+        print(url)
         return url
 
     async def poll(self, offset: Optional[int] = None, timeout: int = 0):
@@ -75,17 +76,24 @@ class TGApi(BaseAccessor):
                     "updates": updatedata,
                     "new_offset": updatedata[-1]["update_id"] + 1,
                 }
+            except IndexError:
+                self.logger.info("Poller: Новых сообщений не было получено")
+                return {
+                    "updates": [],
+                    "new_offset":offset
+                }
             except Exception as inst:
                 self.logger.error(
-                    "POller: Была получена ошибка:", exc_info=inst
+                    "Poller: Была получена ошибка:", exc_info=inst
                 )
 
     async def send_message(self, message: MessageToSend):
-        params = MessageToSendSchema.dump(message)
-        print(params)
+        params = MessageToSendSchema().dump(message)
+        self.app.logger.info(f"Sender: Отправляю сообщение с содержимым {params}")
         url = self.build_url("sendMessage", params)
         async with self.client.get(url) as response:
             data = await response.json()
+            self.app.logger.info(f"Sender: Получил ответ в виде {data}")
             return data
 
     async def send_inline_keyboard(
@@ -95,6 +103,7 @@ class TGApi(BaseAccessor):
         chat_id: str | int,
         message_thread_id: int | None = None,
     ):
+        self.app.logger.info("Sender: Получено сообщение с экранной клавиатурой")
         message = MessageToSend(
             chat_id=chat_id,
             message_thread_id=message_thread_id,
