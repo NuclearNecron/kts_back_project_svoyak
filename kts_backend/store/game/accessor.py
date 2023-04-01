@@ -130,7 +130,7 @@ class GameAccessor(BaseAccessor):
                         chat_id=chat_id,
                         created_at=created_at,
                         state=str(GameState.GAME_INITIALZATION.value),
-                        round=-1,
+                        round=1,
                         creator=player_id,
                     )
                     session.add(new_game)
@@ -249,6 +249,21 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
+    async def get_player_score(self, game_id: int,player_id:int) -> list[GameScoreDC] | None:
+        try:
+            async with self.app.database.session() as session:
+                query = (
+                    select(GameScoreModel)
+                    .where((GameScoreModel.game_id == game_id)&(GameScoreModel.player_id==player_id))
+                )
+                res = await session.scalars(query)
+                if res.one_or_none():
+                    return res.one_or_none().to_dc()
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
     async def get_amount_of_players(self, game_id: int) -> int | None:
         try:
             async with self.app.database.session() as session:
@@ -279,7 +294,7 @@ class GameAccessor(BaseAccessor):
                 )
                 await session.execute(upd_query)
                 await session.commit()
-                return upd_query.to_dc()
+                return selected_pack.to_dc()
         except sqlalchemy.exc.IntegrityError:
             return None
 
@@ -305,9 +320,7 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
-    async def change_game_round(
-        self, game_id: int, round: int = 1
-    ) -> bool | None:
+    async def set_next_round(self, game_id: int) -> bool | None:
         try:
             async with self.app.database.session() as session:
                 sq = select(GameModel).where(GameModel.id == game_id)
@@ -317,7 +330,7 @@ class GameAccessor(BaseAccessor):
                     upd_query = (
                         update(GameModel)
                         .where(GameModel.id == game_id)
-                        .values(round=round)
+                        .values(round=game.round + 1)
                     )
                     await session.execute(upd_query)
                     await session.commit()
@@ -329,7 +342,7 @@ class GameAccessor(BaseAccessor):
 
     async def set_answering(
         self, game_id: int, player_id: int | None
-    ) -> bool | None:
+    ) -> PlayerDC | None:
         try:
             async with self.app.database.session() as session:
                 sq = select(GameModel).where(GameModel.id == game_id)
@@ -343,7 +356,7 @@ class GameAccessor(BaseAccessor):
                     )
                     await session.execute(upd_query)
                     await session.commit()
-                    return True
+                    return await self.get_player_by_id(player_id)
                 else:
                     return None
         except sqlalchemy.exc.IntegrityError:
@@ -431,5 +444,15 @@ class GameAccessor(BaseAccessor):
                     return True
                 else:
                     return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def delete_game(self, game_id: int) -> None:
+        try:
+            async with self.app.database.session() as session:
+                query = delete(GameModel).where(GameModel.id == game_id)
+                await session.execute(query)
+                await session.commit()
+                return None
         except sqlalchemy.exc.IntegrityError:
             return None

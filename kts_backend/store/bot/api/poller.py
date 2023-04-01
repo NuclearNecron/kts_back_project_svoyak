@@ -4,6 +4,13 @@ from typing import Optional
 import typing
 import asyncio
 
+from marshmallow import EXCLUDE
+
+from kts_backend.store.bot.api.schemes import (
+    MessageUpdateSchema,
+    CallbackQueryUpdateSchema,
+)
+
 if typing.TYPE_CHECKING:
     from kts_backend.web.app import Application
 
@@ -15,6 +22,7 @@ class Poller:
         self.poll_task: Optional[Task] = None
 
     async def start(self):
+        self.app.logger.info("Starting Poller")
         self.is_running = True
         self.poll_task = asyncio.create_task(self.poll())
 
@@ -25,17 +33,18 @@ class Poller:
     async def poll(self):
         offset = 0
         while self.is_running:
-            print("poll")
             results = await self.app.store.tgapi.poll(offset, timeout=20)
-            for result in results:
-                print(type(result))
-                offset = result.update_id + 1
-                try:
-                    print("added ", result.update_id)
-                    await self.app.store.work_queue.put(result)
-                except Exception as inst:
-                    self(type(inst))  # the exception instance
-                    print(inst.args)  # arguments stored in .args
-                    print(inst)
-                finally:
-                    print("added to Queue")
+            updates = results["updates"]
+            offset = results["new_offset"]
+            for upd in updates:
+                self.app.logger.info(
+                    f"Poller. Было получено новое сообщение:{upd}"
+                )
+                if "message" in upd:
+                    update = MessageUpdateSchema().load(upd, unknown=EXCLUDE)
+                    await self.app.store.work_queue.put(update)
+                elif "callback_query" in upd:
+                    update = CallbackQueryUpdateSchema().load(
+                        upd, unknown=EXCLUDE
+                    )
+                    await self.app.store.work_queue.put(update)
