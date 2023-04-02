@@ -40,6 +40,7 @@ class Updater:
         FINISHGAME = "/finishgame"
         GAMESTATS = "/gamestats"
         LEFTGAME = "/leftgame"
+        PLAYERSTAT = "/playerstat"
 
     async def handle_update(self):
         while self.is_running:
@@ -77,6 +78,8 @@ class Updater:
                 await self.handle_manual_finish_game(message)
             case self.Commands.LEFTGAME.value:
                 await self.handle_leave(message)
+            case self.Commands.PLAYERSTAT.value:
+                await self.handle_playerstat(message)
             case _:
                 await self.handle_wrong_command(message)
 
@@ -333,6 +336,13 @@ class Updater:
             message_thread_id=message.message.message_thread_id,
             reply_to_message_id=message.message.message_id,
             text=f"Такой команды не существует",
+        )
+
+    async def handle_playerstat(self, message: MessageUpdate):
+        await self.handle_to_queue(
+            chat_id=message.message.chat.id,
+            message_thread_id=message.message.message_thread_id,
+            text=f"Метод не имплементирован в проект еще.",
         )
 
     async def handle_text_message(self, message: MessageUpdate):

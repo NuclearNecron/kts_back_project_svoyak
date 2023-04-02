@@ -78,10 +78,7 @@ class TGApi(BaseAccessor):
                 }
             except IndexError:
                 self.logger.info("Poller: Новых сообщений не было получено")
-                return {
-                    "updates": [],
-                    "new_offset":offset
-                }
+                return {"updates": [], "new_offset": offset}
             except Exception as inst:
                 self.logger.error(
                     "Poller: Была получена ошибка:", exc_info=inst
@@ -89,7 +86,9 @@ class TGApi(BaseAccessor):
 
     async def send_message(self, message: MessageToSend):
         params = MessageToSendSchema().dump(message)
-        self.app.logger.info(f"Sender: Отправляю сообщение с содержимым {params}")
+        self.app.logger.info(
+            f"Sender: Отправляю сообщение с содержимым {params}"
+        )
         url = self.build_url("sendMessage", params)
         async with self.client.get(url) as response:
             data = await response.json()
@@ -103,7 +102,9 @@ class TGApi(BaseAccessor):
         chat_id: str | int,
         message_thread_id: int | None = None,
     ):
-        self.app.logger.info("Sender: Получено сообщение с экранной клавиатурой")
+        self.app.logger.info(
+            "Sender: Получено сообщение с экранной клавиатурой"
+        )
         message = MessageToSend(
             chat_id=chat_id,
             message_thread_id=message_thread_id,

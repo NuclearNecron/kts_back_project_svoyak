@@ -136,7 +136,9 @@ class ThemeModel(db):
     )
     description = Column(String, nullable=True)
 
-    questions = relationship(QuestionModel, back_populates="theme",order_by = "QuestionModel.cost")
+    questions = relationship(
+        QuestionModel, back_populates="theme", order_by="QuestionModel.cost"
+    )
     round = relationship("RoundModel", back_populates="themes")
 
     __table_args__ = (
@@ -231,6 +233,9 @@ class GameModel(db):
     creator = Column(
         Integer, ForeignKey("player.tg_id", ondelete="SET NULL"), nullable=True
     )
+    current_question = Column(
+        Integer, ForeignKey("question.id", ondelete="SET NULL"), nullable=True
+    )
 
     score = relationship(
         "GameScoreModel",
@@ -253,4 +258,5 @@ class GameModel(db):
             answering_player_tg_id=self.answering_player_tg_id,
             answer_time=self.answer_time,
             creator=self.creator,
+            current_question=self.current_question,
         )

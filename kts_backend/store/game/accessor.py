@@ -164,23 +164,91 @@ class GameAccessor(BaseAccessor):
         async with self.app.database.session() as session:
             query = select(PlayerModel).where(PlayerModel.tg_id == tg_id)
             res = await session.scalars(query)
-            answer=res.one_or_none()
+            answer = res.one_or_none()
             if answer:
                 return answer.to_dc()
             else:
                 return None
 
+    async def change_player_games(
+        self, player_id: int, added: bool
+    ) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                player = await self.get_player_by_id(player_id)
+                if player:
+                    if added:
+                        upd_query = (
+                            update(PlayerModel)
+                            .where(PlayerModel.tg_id == player_id)
+                            .values(games_count=player.games_count + 1)
+                        )
+                    else:
+                        upd_query = (
+                            update(PlayerModel)
+                            .where(PlayerModel.tg_id == player_id)
+                            .values(games_count=player.games_count - 1)
+                        )
+                    await session.execute(upd_query)
+                    await session.commit()
+                    return None
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def make_player_winner(self, player_id: int) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                player = await self.get_player_by_id(player_id)
+                if player:
+                    upd_query = (
+                        update(PlayerModel)
+                        .where(PlayerModel.tg_id == player_id)
+                        .values(win_count=player.win_count + 1)
+                    )
+                    await session.execute(upd_query)
+                    await session.commit()
+                    return None
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def set_winner(self, game_id: int, player_id: int) -> PlayerDC | None:
+        try:
+            async with self.app.database.session() as session:
+                sq = select(GameModel).where(GameModel.id == game_id)
+                res = await session.scalars(sq)
+                game = res.one_or_none()
+                if game:
+                    upd_query = (
+                        update(GameModel)
+                        .where(GameModel.id == game_id)
+                        .values(winner_id=player_id)
+                    )
+                    await session.execute(upd_query)
+                    await session.commit()
+                    await self.make_player_winner(player_id)
+                    return await self.get_player_by_id(player_id)
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
     async def add_player_to_game(
-        self, player_id: int, game_id: int, points: int = 0
+        self, player_id: int, game_id: int
     ) -> GameScoreDC | None:
         try:
             async with self.app.database.session() as session:
+                await self.change_player_games(player_id, True)
                 new_player_score = GameScoreModel(
                     player_id=player_id, game_id=game_id
                 )
                 session.add(new_player_score)
                 await session.commit()
                 return new_player_score.to_dc()
+
         except sqlalchemy.exc.IntegrityError:
             return None
 
@@ -232,6 +300,7 @@ class GameAccessor(BaseAccessor):
     ) -> None:
         try:
             async with self.app.database.session() as session:
+                await self.change_player_games(player_id, False)
                 query = delete(GameScoreModel).where(
                     (GameScoreModel.player_id == player_id)
                     & (GameScoreModel.game_id == game_id)
@@ -269,7 +338,7 @@ class GameAccessor(BaseAccessor):
                     & (GameScoreModel.player_id == player_id)
                 )
                 res = await session.scalars(query)
-                result  = res.one_or_none()
+                result = res.one_or_none()
                 if result:
                     return result.to_dc()
                 else:
@@ -294,9 +363,7 @@ class GameAccessor(BaseAccessor):
         try:
             async with self.app.database.session() as session:
                 query = (
-                    select(QuestionPackModel)
-                    .order_by(func.random())
-                    .limit(1)
+                    select(QuestionPackModel).order_by(func.random()).limit(1)
                 )
                 res = await session.scalars(query)
                 selected_pack = res.one_or_none()
@@ -382,7 +449,7 @@ class GameAccessor(BaseAccessor):
                     QuestionModel.id == question_id
                 )
                 res = await session.scalars(query)
-                result =res.one_or_none()
+                result = res.one_or_none()
                 if result:
                     return result.to_dc()
                 else:
@@ -410,9 +477,7 @@ class GameAccessor(BaseAccessor):
                         question_query = (
                             select(ThemeModel)
                             .where(ThemeModel.round_id == roundres.id)
-                            .options(
-                                selectinload(ThemeModel.questions)
-                            )
+                            .options(selectinload(ThemeModel.questions))
                         )
                         result = await session.scalars(question_query)
                         questions_res = result.all()
@@ -466,5 +531,120 @@ class GameAccessor(BaseAccessor):
                 await session.execute(query)
                 await session.commit()
                 return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def check_answer(
+        self, question_id: int, requested_answer: str
+    ) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(AnswersModel).where(
+                    AnswersModel.question_id == question_id
+                )
+                res = await session.scalars(query)
+                result = res.all()
+                list_of_answers = [answer.to_dc().text for answer in result]
+                if requested_answer in list_of_answers:
+                    return True
+                else:
+                    return False
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def remove_from_remaining(
+        self, game_id: int, question_id: int
+    ) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                question_list = await self.get_remaining_questions(game_id)
+                if question_list:
+                    question_list.remove(question_id)
+                    res = await self.dump_question(
+                        game_id=game_id, questions=question_list
+                    )
+                    if res:
+                        return True
+                    else:
+                        return None
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_questions_from_remaining(
+        self, game_id
+    ) -> list[GameTheme] | None:
+        try:
+            async with self.app.database.session() as session:
+                question_list = await self.get_remaining_questions(game_id)
+                if question_list:
+                    query = (
+                        select(ThemeModel)
+                        .join(
+                            QuestionModel,
+                            ThemeModel.id == QuestionModel.theme_id,
+                        )
+                        .filter(QuestionModel.id.in_(question_list))
+                        .func.array_agg(
+                            func.json_build_object(
+                                QuestionModel.id,
+                                QuestionModel.name,
+                                QuestionModel.cost,
+                                QuestionModel.theme_id,
+                            )
+                        )
+                        .label("questions")
+                        .group_by(ThemeModel.id)
+                    )
+                    result = await session.scalars(query)
+                    questions_res = result.all()
+                    print(questions_res)
+                    if questions_res:
+                        ret_result = [
+                            GameTheme(
+                                theme=ThemeDC(
+                                    id=theme.id,
+                                    round_id=theme.round_id,
+                                    name=theme.name,
+                                    description=theme.description
+                                    if theme.description in theme
+                                    else None,
+                                ),
+                                questions=[
+                                    QuestionDC(
+                                        id=question.id,
+                                        name=question.name,
+                                        theme_id=question.theme_id,
+                                        cost=question.cost,
+                                    )
+                                    for question in theme["questions"]
+                                ],
+                            )
+                            for theme in questions_res
+                        ]
+                        print(ret_result)
+                        return ret_result
+                    else:
+                        return None
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_remaining_questions(self, game_id: int) -> list[int] | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(GameModel).where(GameModel.id == game_id)
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
+                    remaining_questions = result.to_dc().remaining_questions
+                    if remaining_questions:
+                        return remaining_questions
+                    else:
+                        return None
+                else:
+                    return None
         except sqlalchemy.exc.IntegrityError:
             return None

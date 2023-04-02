@@ -65,6 +65,7 @@ class GameDC:
     remaining_questions: list[int] | None
     answering_player_tg_id: int | None
     creator: int | None
+    current_question: int | None
 
 
 @dataclass
