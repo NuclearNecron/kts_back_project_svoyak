@@ -58,7 +58,6 @@ class TGApi(BaseAccessor):
             url += "&reply_markup=" + json.dumps(params["reply_markup"])
         if "allowed_updates" in params and len(params["allowed_updates"]) > 0:
             url += "&allowed_updates=" + ",".join(params["allowed_updates"])
-        print(url)
         return url
 
     async def poll(self, offset: Optional[int] = None, timeout: int = 0):
@@ -123,5 +122,8 @@ class TGApi(BaseAccessor):
             method="answerCallbackQuery",
             params=answerCallbackQuerySchema().dump(answer),
         )
+        self.app.logger.info(f"Sender: Отправляю ответ с содержимым {answer}")
         async with self.client.get(url) as response:
-            return None
+            data = await response.json()
+            self.app.logger.info(f"Sender: Получил ответ в виде {data}")
+            return data

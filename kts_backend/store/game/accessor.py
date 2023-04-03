@@ -35,7 +35,7 @@ from kts_backend.game.models import (
 
 class GameAccessor(BaseAccessor):
     async def create_pack(
-        self, name: str, admin: int, description: str | None
+        self, name: str, admin: int, description: str | None = None
     ) -> QuestionPackDC | None:
         try:
             async with self.app.database.session() as session:
@@ -59,7 +59,7 @@ class GameAccessor(BaseAccessor):
             return None
 
     async def create_theme(
-        self, round: int, name: str, description: str | None
+        self, round: int, name: str, description: str | None = None
     ) -> ThemeDC | None:
         try:
             async with self.app.database.session() as session:
@@ -146,7 +146,7 @@ class GameAccessor(BaseAccessor):
                 return None
 
     async def create_player(
-        self, tg_id: int, name: str, username: str | None
+        self, tg_id: int, name: str, username: str | None = None
     ) -> PlayerDC | None:
         try:
             async with self.app.database.session() as session:
@@ -209,7 +209,7 @@ class GameAccessor(BaseAccessor):
                     )
                     await session.execute(upd_query)
                     await session.commit()
-                    return None
+                    return True
                 else:
                     return None
         except sqlalchemy.exc.IntegrityError:
@@ -421,7 +421,7 @@ class GameAccessor(BaseAccessor):
             return None
 
     async def set_answering(
-        self, game_id: int, player_id: int | None
+        self, game_id: int, player_id: int | None = None
     ) -> PlayerDC | None:
         try:
             async with self.app.database.session() as session:
@@ -503,7 +503,7 @@ class GameAccessor(BaseAccessor):
             return None
 
     async def dump_question(
-        self, game_id: int, questions: list[int] | None
+        self, game_id: int, questions: list[int] | None = None
     ) -> bool | None:
         try:
             async with self.app.database.session() as session:
@@ -644,6 +644,44 @@ class GameAccessor(BaseAccessor):
                         return remaining_questions
                     else:
                         return None
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def check_player_in_game(
+        self, game_id: int, player_id: int
+    ) -> PlayerDC | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(GameScoreModel).where(
+                    (GameScoreModel.game_id == game_id)
+                    & (GameScoreModel.player_id == player_id)
+                )
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
+                    return result.to_dc()
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def set_current_question(
+        self, game_id: int, question: int | None = None
+    ) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                game = await self.return_current_game(game_id)
+                if game:
+                    upd_query = (
+                        update(GameModel)
+                        .where(GameModel.id == game_id)
+                        .values(current_question=question)
+                    )
+                    await session.execute(upd_query)
+                    await session.commit()
+                    return True
                 else:
                     return None
         except sqlalchemy.exc.IntegrityError:
