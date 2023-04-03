@@ -92,6 +92,7 @@ class GameTheme:
     theme: ThemeDC
     questions: list[QuestionDC] | None
 
+
 @dataclass
 class PlayerScore:
     score: GameScoreDC

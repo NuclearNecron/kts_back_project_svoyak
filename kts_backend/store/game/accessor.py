@@ -18,7 +18,8 @@ from kts_backend.game.dataclasses import (
     GameDC,
     GameState,
     GameScoreDC,
-    GameTheme, PlayerScore,
+    GameTheme,
+    PlayerScore,
 )
 
 from kts_backend.game.models import (
@@ -123,7 +124,7 @@ class GameAccessor(BaseAccessor):
                 query = (
                     select(GameModel)
                     .where(GameModel.chat_id == chat_id)
-                    .order_by(GameModel.created_at)
+                    .order_by(desc(GameModel.created_at))
                     .limit(1)
                 )
                 res = await session.scalars(query)
@@ -520,7 +521,9 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
-    async def get_game_scores_with_players(self, game_id: int) -> list[PlayerScore] | None:
+    async def get_game_scores_with_players(
+        self, game_id: int
+    ) -> list[PlayerScore] | None:
         try:
             async with self.app.database.session() as session:
                 query = (
@@ -533,17 +536,20 @@ class GameAccessor(BaseAccessor):
                 results = res.all()
                 if results:
                     ret_result = [
-                            PlayerScore(
-                                score = score.to_dc(),
-                                player=score.player.to_dc()
-                            )
-                            for score in results
+                        PlayerScore(
+                            score=score.to_dc(), player=score.player.to_dc()
+                        )
+                        for score in results
                     ]
+                    print("''''''")
+                    print(ret_result)
+                    print("''''''")
                     return ret_result
                 else:
                     return None
         except sqlalchemy.exc.IntegrityError:
             return None
+
     async def dump_question(
         self, game_id: int, questions: list[int] | None = None
     ) -> bool | None:
@@ -623,28 +629,19 @@ class GameAccessor(BaseAccessor):
             async with self.app.database.session() as session:
                 question_list = await self.get_remaining_questions(game_id)
                 if question_list:
-                    query = (
+                    query1 = (
                         select(ThemeModel)
                         .join(
                             QuestionModel,
                             ThemeModel.id == QuestionModel.theme_id,
-                        )
-                        .filter(QuestionModel.id.in_(question_list))
-                        .func.array_agg(
-                            func.json_build_object(
-                                QuestionModel.id,
-                                QuestionModel.name,
-                                QuestionModel.cost,
-                                QuestionModel.theme_id,
-                            )
-                        )
-                        .label("questions")
-                        .group_by(ThemeModel.id)
-                    )
-                    result = await session.scalars(query)
-                    questions_res = result.all()
-                    print(questions_res)
-                    if questions_res:
+                        )).filter(QuestionModel.id.in_(question_list)).group_by(ThemeModel.id)
+                    query2 = select(QuestionModel).where(QuestionModel.id.in_(question_list)).order_by(QuestionModel.cost)
+                    resulttheme = await session.scalars(query1)
+                    theme_res = resulttheme.all()
+                    resultquest =  await session.scalars(query2)
+                    quest_res = resultquest.all()
+                    print(theme_res,quest_res)
+                    if theme_res and quest_res:
                         ret_result = [
                             GameTheme(
                                 theme=ThemeDC(
@@ -652,8 +649,6 @@ class GameAccessor(BaseAccessor):
                                     round_id=theme.round_id,
                                     name=theme.name,
                                     description=theme.description
-                                    if theme.description in theme
-                                    else None,
                                 ),
                                 questions=[
                                     QuestionDC(
@@ -662,10 +657,10 @@ class GameAccessor(BaseAccessor):
                                         theme_id=question.theme_id,
                                         cost=question.cost,
                                     )
-                                    for question in theme["questions"]
+                                    for question in quest_res if question.theme_id==theme.id
                                 ],
                             )
-                            for theme in questions_res
+                            for theme in theme_res
                         ]
                         print(ret_result)
                         return ret_result
@@ -716,8 +711,6 @@ class GameAccessor(BaseAccessor):
     ) -> bool | None:
         try:
             async with self.app.database.session() as session:
-                game = await self.return_current_game(game_id)
-                if game:
                     upd_query = (
                         update(GameModel)
                         .where(GameModel.id == game_id)
@@ -726,7 +719,5 @@ class GameAccessor(BaseAccessor):
                     await session.execute(upd_query)
                     await session.commit()
                     return True
-                else:
-                    return None
         except sqlalchemy.exc.IntegrityError:
             return None

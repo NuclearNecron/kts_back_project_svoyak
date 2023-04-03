@@ -25,12 +25,14 @@ class Updater:
     def __init__(self, app: "Application"):
         self.app = app
         self.is_running = False
-        self.handle_task: Optional[Task] = None
+        self.handle_task: list[Task] |None
 
     async def start(self):
         print("manager init")
         self.is_running = True
-        self.handle_task = asyncio.create_task(self.handle_update())
+        # self.handle_task = asyncio.create_task(self.handle_update())
+        self.handle_task = asyncio.gather(self.handle_update(),self.handle_update(),self.handle_update(),
+                                          self.handle_update(),self.handle_update(),self.handle_update())
 
     async def stop(self):
         self.is_running = False
@@ -178,7 +180,7 @@ class Updater:
         chat_id: int,
         owner_id: int,
         message_thread_id: int | None = None,
-        time_to_start: int = 30,
+        time_to_start: int = 5,
         min_number_of_players: int = 1,
     ) -> None:
         await asyncio.sleep(time_to_start)
@@ -412,7 +414,7 @@ class Updater:
                 await self.handle_choosing_question(game, callback_query)
 
     async def handle_set_answering(self, game: GameDC, callback: CallbackQuery):
-        requester = self.app.store.game.check_player_in_game(
+        requester = await self.app.store.game.check_player_in_game(
             game_id=game.id, player_id=callback.from_user.id
         )
         if requester:
@@ -433,11 +435,13 @@ class Updater:
                     current_game_state.state
                     == GameState.QUESTION_ANSWERING.value
                 ):
+                    print("''''''")
+                    print("''''''")
                     if (
                         current_game_state.current_question
                         == game.current_question
                         and current_game_state.answering_player_tg_id
-                        == game.answering_player_tg_id
+                        == callback.from_user.id
                     ):
                         question = await self.app.store.game.get_question(
                             current_game_state.current_question
@@ -497,10 +501,27 @@ class Updater:
                 await self.app.store.game.change_game_status(
                     game.id, GameState.QUESTION_ANSWERING.value
                 )
-                await self.app.store.game.set_current_question(
+                res= await self.app.store.game.set_current_question(
                     game_id=game.id, question=int(callback_data[0])
                 )
                 await self.app.store.game.set_answering(game_id=game.id)
+                inline_keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="Ответить",
+                                callback_data=f"join",
+                            )
+                        ]
+                    ]
+                )
+                question = await self.app.store.game.get_question(int(callback_data[0]))
+                data = await self.app.store.tgapi.send_inline_keyboard(
+                    inline_keyboard=inline_keyboard,
+                    chat_id=callback.message.chat.id,
+                    message_thread_id=callback.message.message_thread_id,
+                    text=question.name,
+                )
                 while True:
                     await asyncio.sleep(game.answer_time)
                     current_game_state = (
@@ -508,69 +529,73 @@ class Updater:
                             callback.message.chat.id
                         )
                     )
-                    if (
-                        current_game_state.state
-                        == GameState.QUESTION_ANSWERING.value
-                        and current_game_state.answering_player_tg_id is None
-                        and current_game_state.current_question
-                        == int(callback_data[0])
-                    ):
-                        await self.app.store.game.change_game_status(
-                            game.id, GameState.QUESTION_SELECT.value
-                        )
-                        await self.app.store.game.set_current_question(
-                            game_id=game.id
-                        )
-                        await self.app.store.game.remove_from_remaining(
-                            game_id=game.id, question_id=int(callback_data[0])
-                        )
-                        await self.app.store.game.set_answering(
-                            game_id=game.id, player_id=callback.from_user.id
-                        )
-                        if len(current_game_state.remaining_questions) != 1:
-                            questions = await self.app.store.game.get_questions_from_remaining(
+                    if (current_game_state.state== GameState.QUESTION_ANSWERING.value and current_game_state.current_question == int(callback_data[0])):
+                        if(current_game_state.answering_player_tg_id is None ):
+                            await self.app.store.game.change_game_status(
+                                game.id, GameState.QUESTION_SELECT.value
+                            )
+                            await self.app.store.game.set_current_question(
                                 game_id=game.id
                             )
-                            inline_keyboard = InlineKeyboardMarkup(
-                                inline_keyboard=[
-                                    [
-                                        InlineKeyboardButton(
-                                            text=theme.theme.name,
-                                            callback_data=f"""Описание темы: {theme.theme.description if theme.theme.description else "Нет описания"}.""",
-                                        )
-                                    ]
-                                    + [
-                                        InlineKeyboardButton(
-                                            text=question.cost,
-                                            callback_data=f"{question.id};{len(current_game_state.remaining_questions)-1}",
-                                        )
-                                        for question in theme.questions
-                                    ]
-                                    for theme in questions
-                                ]
+                            await self.app.store.game.remove_from_remaining(
+                                game_id=game.id, question_id=int(callback_data[0])
                             )
-                            data = await self.app.store.tgapi.send_inline_keyboard(
-                                inline_keyboard=inline_keyboard,
-                                chat_id=callback.message.chat.id,
-                                message_thread_id=callback.message.message_thread_id,
-                                text="Вопросы для выбора",
+                            await self.app.store.game.set_answering(
+                                game_id=game.id, player_id=callback.from_user.id
                             )
-                            await self.handle_to_queue(
-                                chat_id=callback.message.chat.id,
-                                message_thread_id=callback.message.message_thread_id,
-                                text=f"Выбирайте вопрос, {callback.from_user.username if callback.from_user.username else callback.from_user.first_name}",
-                            )
-                            await self.app.store.tgapi.answerCallbackQuery(
-                                answerCallbackQuery(
-                                    callback_query_id=callback.id,
-                                    text="Вопрос не был отвечен",
-                                    show_alert=False,
+                            if len(current_game_state.remaining_questions) != 1:
+                                questions = await self.app.store.game.get_questions_from_remaining(
+                                    game_id=game.id
                                 )
-                            )
-                            break
+                                inline_keyboard = InlineKeyboardMarkup(
+                                    inline_keyboard=[
+                                        [
+                                            InlineKeyboardButton(
+                                                text=theme.theme.name,
+                                                callback_data=f"""Описание темы: {theme.theme.description if theme.theme.description else "Нет описания"}.""",
+                                            )
+                                        ]
+                                        + [
+                                            InlineKeyboardButton(
+                                                text=question.cost,
+                                                callback_data=f"{question.id};{len(current_game_state.remaining_questions)-1}",
+                                            )
+                                            for question in theme.questions
+                                        ]
+                                        for theme in questions
+                                    ]
+                                )
+                                data = await self.app.store.tgapi.send_inline_keyboard(
+                                    inline_keyboard=inline_keyboard,
+                                    chat_id=callback.message.chat.id,
+                                    message_thread_id=callback.message.message_thread_id,
+                                    text="Вопросы для выбора",
+                                )
+                                await self.handle_to_queue(
+                                    chat_id=callback.message.chat.id,
+                                    message_thread_id=callback.message.message_thread_id,
+                                    text=f"Выбирайте вопрос, {callback.from_user.username if callback.from_user.username else callback.from_user.first_name}",
+                                )
+                                await self.app.store.tgapi.answerCallbackQuery(
+                                    answerCallbackQuery(
+                                        callback_query_id=callback.id,
+                                        text="Вопрос не был отвечен",
+                                        show_alert=False,
+                                    )
+                                )
+                                break
+                            else:
+                                await self.app.store.tgapi.answerCallbackQuery(
+                                    answerCallbackQuery(
+                                        callback_query_id=callback.id,
+                                        text="Вопрос был отвечен",
+                                        show_alert=False,
+                                    )
+                                )
+                                await self.handle_next_round(game, callback)
+                                break
                         else:
-                            await self.handle_next_round(game, callback)
-                            break
+                            pass
                     else:
                         await self.app.store.tgapi.answerCallbackQuery(
                             answerCallbackQuery(
@@ -606,10 +631,11 @@ class Updater:
                 game.answering_player_tg_id == message.message.from_user.id
                 and game.state == GameState.QUESTION_ANSWERING.value
             ):
-                answer_result = self.app.store.game.check_answer(
+                answer_result = await self.app.store.game.check_answer(
                     question_id=game.current_question,
                     requested_answer=message.message.text,
                 )
+                print(answer_result)
                 if answer_result:
                     await self.handle_right_answer(game, message)
                 else:

@@ -5,13 +5,14 @@ from aiohttp.web import (
     View as AiohttpView,
     Request as AiohttpRequest,
 )
-
+from aiohttp_apispec import setup_aiohttp_apispec
 
 from kts_backend import __appname__
 
 # __version__
 from .config import Config, setup_config
 from .logger import setup_logging
+from .mw import setup_middlewares
 from .urls import register_urls
 
 
@@ -56,14 +57,14 @@ class View(AiohttpView):
 app = Application()
 
 
+
 def setup_app(config_path: str) -> Application:
     setup_logging(app)
     setup_config(app, config_path)
-    # session_setup(app, EncryptedCookieStorage(app.config.session.key))
-    # setup_routes(app)
-    # setup_aiohttp_apispec(
-    #     app, title="Vk Quiz Bot", url="/docs/json", swagger_path="/docs"
-    # )
-    # setup_middlewares(app)
+    register_urls(app)
+    setup_aiohttp_apispec(
+        app, title="Svoyak bot", url="/docs/json", swagger_path="/docs"
+    )
+    setup_middlewares(app)
     setup_store(app)
     return app
