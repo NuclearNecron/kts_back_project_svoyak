@@ -330,7 +330,7 @@ class GameAccessor(BaseAccessor):
 
     async def get_player_score(
         self, game_id: int, player_id: int
-    ) -> list[GameScoreDC] | None:
+    ) -> GameScoreDC | None:
         try:
             async with self.app.database.session() as session:
                 query = select(GameScoreModel).where(
@@ -544,8 +544,8 @@ class GameAccessor(BaseAccessor):
                 )
                 res = await session.scalars(query)
                 result = res.all()
-                list_of_answers = [answer.to_dc().text for answer in result]
-                if requested_answer in list_of_answers:
+                list_of_answers = [answer.to_dc().text.lower() for answer in result]
+                if requested_answer.lower() in list_of_answers:
                     return True
                 else:
                     return False

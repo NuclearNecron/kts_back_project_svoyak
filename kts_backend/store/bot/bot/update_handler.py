@@ -342,13 +342,6 @@ class Updater:
             text=f"Метод не имплементирован в проект еще.",
         )
 
-    async def handle_text_message(self, message: MessageUpdate):
-        await self.handle_to_queue(
-            chat_id=message.message.chat.id,
-            message_thread_id=message.message.message_thread_id,
-            text=f"Метод не имплементирован в проект еще.",
-        )
-
     async def handle_game_stat(self, message: MessageUpdate):
         # todo сделать таблицу лидеров.
         await self.handle_to_queue(
@@ -383,57 +376,68 @@ class Updater:
                 await self.handle_choosing_question(game, callback_query)
 
     async def handle_set_answering(self, game: GameDC, callback: CallbackQuery):
-        if (
-            game.answering_player_tg_id is None
-            and game.state == GameState.QUESTION_ANSWERING.value
-        ):
-            await self.app.store.game.set_answering(
-                game_id=game.id, player_id=callback.from_user.id
-            )
-            await asyncio.sleep(game.answer_time)
-            current_game_state = await self.app.store.game.return_current_game(
-                callback.message.chat.id
-            )
-            if current_game_state.state == GameState.QUESTION_ANSWERING.value:
-                if (
-                    current_game_state.current_question == game.current_question
-                    and current_game_state.answering_player_tg_id
-                    == game.answering_player_tg_id
-                ):
-                    question = await self.app.store.game.get_question(
-                        current_game_state.current_question
-                    )
-                    await self.app.store.game.update_player_score(
-                        player_id=callback.from_user.id,
-                        game_id=game.id,
-                        is_correct=False,
-                        add_score=question.cost,
-                    )
-                    await self.app.store.game.set_answering(game_id=game.id)
-                    await self.app.store.tgapi.answerCallbackQuery(
-                        answerCallbackQuery(
-                            callback_query_id=callback.id,
-                            text="Истекло время ответа на вопрос.",
-                            show_alert=True,
-                        )
-                    )
-                    await self.handle_to_queue(
-                        chat_id=callback.message.chat.id,
-                        message_thread_id=callback.message.message_thread_id,
-                        text=f"Истекло время ответа на вопрос. Вы получаете -{question.cost} очков",
-                    )
-            await self.app.store.tgapi.answerCallbackQuery(
-                answerCallbackQuery(
-                    callback_query_id=callback.id,
-                    text="Игрок перестал отвечать до конца ожидания",
-                    show_alert=False,
+        requester = self.app.store.game.check_player_in_game(game_id=game.id,player_id=callback.from_user.id
+        )
+        if requester:
+            if (
+                game.answering_player_tg_id is None
+                and game.state == GameState.QUESTION_ANSWERING.value
+            ):
+                await self.app.store.game.set_answering(
+                    game_id=game.id, player_id=callback.from_user.id
                 )
-            )
+                await asyncio.sleep(game.answer_time)
+                current_game_state = await self.app.store.game.return_current_game(
+                    callback.message.chat.id
+                )
+                if current_game_state.state == GameState.QUESTION_ANSWERING.value:
+                    if (
+                        current_game_state.current_question == game.current_question
+                        and current_game_state.answering_player_tg_id
+                        == game.answering_player_tg_id
+                    ):
+                        question = await self.app.store.game.get_question(
+                            current_game_state.current_question
+                        )
+                        await self.app.store.game.update_player_score(
+                            player_id=callback.from_user.id,
+                            game_id=game.id,
+                            is_correct=False,
+                            add_score=question.cost,
+                        )
+                        await self.app.store.game.set_answering(game_id=game.id)
+                        await self.app.store.tgapi.answerCallbackQuery(
+                            answerCallbackQuery(
+                                callback_query_id=callback.id,
+                                text="Истекло время ответа на вопрос.",
+                                show_alert=True,
+                            )
+                        )
+                        await self.handle_to_queue(
+                            chat_id=callback.message.chat.id,
+                            message_thread_id=callback.message.message_thread_id,
+                            text=f"Истекло время ответа на вопрос. Вы получаете -{question.cost} очков",
+                        )
+                await self.app.store.tgapi.answerCallbackQuery(
+                    answerCallbackQuery(
+                        callback_query_id=callback.id,
+                        text="Игрок перестал отвечать до конца ожидания",
+                        show_alert=False,
+                    )
+                )
+            else:
+                await self.app.store.tgapi.answerCallbackQuery(
+                    answerCallbackQuery(
+                        callback_query_id=callback.id,
+                        text="Нельзя стать отвечающим в данный момент",
+                        show_alert=False,
+                    )
+                )
         else:
             await self.app.store.tgapi.answerCallbackQuery(
                 answerCallbackQuery(
                     callback_query_id=callback.id,
-                    text="Нельзя стать отвечающим в данный момент",
+                    text="Вы не учавствуете в игре",
                     show_alert=False,
                 )
             )
@@ -500,13 +504,7 @@ class Updater:
                             )
                             break
                         else:
-                            await self.app.store.tgapi.answerCallbackQuery(
-                                answerCallbackQuery(
-                                    callback_query_id=callback.id,
-                                    text="Вопрос был отвечен",
-                                    show_alert=False,
-                                )
-                            )
+                            await self.handle_next_round(game,callback)
                             break
                     else:
                         await self.app.store.tgapi.answerCallbackQuery(
@@ -533,6 +531,137 @@ class Updater:
                     show_alert=False,
                 )
             )
+    async def handle_text_message(self, message: MessageUpdate):
+        game = await self.app.store.game.return_current_game(
+            message.message.chat.id
+        )
+        if game:
+            if game.answering_player_tg_id == message.message.from_user.id and game.state == GameState.QUESTION_ANSWERING.value:
+                answer_result = self.app.store.game.check_answer(question_id= game.current_question,requested_answer=message.message.text)
+                if answer_result:
+                    await self.handle_right_answer(game,message)
+                else:
+                    await self.handle_wrong_answer(game, message)
+    async def handle_right_answer(self,game:GameDC,message:MessageUpdate):
+        question = await self.app.store.game.get_question(game.current_question)
+        await self.app.store.game.update_player_score(player_id=message.message.from_user.id,game_id=game.id,is_correct=True,add_score=question.cost)
+        await self.app.store.game.change_game_status(game.id, GameState.QUESTION_SELECT.value)
+        await self.app.store.game.set_current_question(game_id=game.id)
+        await self.app.store.game.remove_from_remaining(game_id=game.id, question_id=question.id)
+        await self.handle_to_queue(
+            chat_id=message.message.chat.id,
+            message_thread_id=message.message.message_thread_id,
+            reply_to_message_id=message.message.message_id,
+            text=f"Вы ответили правильно!",
+        )
+        player_score = await self.app.store.game.get_player_score(game_id=game.id,player_id=message.message.from_user.id)
+        await self.handle_to_queue(
+            chat_id=message.message.chat.id,
+            message_thread_id=message.message.message_thread_id,
+            reply_to_message_id=message.message.message_id,
+            text=f"Ваш новый счет: {player_score.score}",
+        )
+        if len(game.remaining_questions) != 1:
+            questions = await self.app.store.game.get_questions_from_remaining(game_id=game.id)
+            inline_keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=theme.theme.name,
+                            callback_data=f"""Описание темы: {theme.theme.description if theme.theme.description else "Нет описания"}.""",
+                        )
+                    ]
+                    + [
+                        InlineKeyboardButton(
+                            text=question.cost,
+                            callback_data=f"{question.id};{len(game.remaining_questions) - 1}",
+                        )
+                        for question in theme.questions
+                    ]
+                    for theme in questions
+                ]
+            )
+            data = await self.app.store.tgapi.send_inline_keyboard(
+                inline_keyboard=inline_keyboard,
+                chat_id=message.message.chat.id,
+                message_thread_id=message.message.message_thread_id,
+                text="Вопросы для выбора",
+            )
+            await self.handle_to_queue(
+                chat_id=message.message.chat.id,
+                message_thread_id=message.message.message_thread_id,
+                text=f"Выбирайте вопрос, {message.message.from_user.username if message.message.from_user.username else message.message.from_user.first_name}",
+            )
+
+        else:
+            await self.handle_next_round(game, message)
+
+    async def handle_wrong_answer(self,game:GameDC,message:MessageUpdate):
+        question = await self.app.store.game.get_question(game.current_question)
+        await self.app.store.game.update_player_score(player_id=message.message.from_user.id,game_id=game.id,is_correct=False,add_score=question.cost)
+        await self.app.store.game.set_answering(game_id=game.id)
+        await self.handle_to_queue(
+            chat_id=message.message.chat.id,
+            message_thread_id=message.message.message_thread_id,
+            reply_to_message_id=message.message.message_id,
+            text=f"Вы ответили неправильно!",
+        )
+    async def handle_next_round(self,game:GameDC, response:MessageUpdate|CallbackQuery):
+        await self.app.store.game.set_next_round(game_id=game.id)
+        questionres = await self.app.store.game.get_round(game_id=game.id)
+        if questionres:
+            question_list = []
+            for theme in questionres:
+                for question in theme.questions:
+                    question_list.append(question.id)
+            inline_keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=theme.theme.name,
+                            callback_data=f"""Описание темы: {theme.theme.description if theme.theme.description else "Нет описания"}.""",
+                        )
+                    ]
+                    + [
+                        InlineKeyboardButton(
+                            text=question.cost,
+                            callback_data=f"{question.id};{len(question_list)}",
+                        )
+                        for question in theme.questions
+                    ]
+                    for theme in questionres
+                ]
+            )
+            await self.app.store.game.dump_question(
+                game_id=game.id, questions=question_list
+            )
+            data = await self.app.store.tgapi.send_inline_keyboard(
+                inline_keyboard=inline_keyboard,
+                chat_id=response.message.chat.id,
+                message_thread_id=response.message.message_thread_id,
+                text="Вопросы для выбора",
+            )
+            if type(response)==MessageUpdate:
+                await self.handle_to_queue(
+                    chat_id=response.message.chat.id,
+                    message_thread_id=response.message.message_thread_id,
+                    text=f"Раунд начинает {response.message.from_user.username if response.message.from_user.username else response.message.from_user.first_name}",
+                )
+            else:
+                await self.handle_to_queue(
+                    chat_id=response.message.chat.id,
+                    message_thread_id=response.message.message_thread_id,
+                    text=f"Раунд начинает {response.from_user.username if response.from_user.username else response.from_user.first_name}",
+                )
+        else:
+            await self.handle_to_queue(
+                    chat_id=response.message.chat.id,
+                    message_thread_id=response.message.message_thread_id,
+                    text=f"Все вопросы вышли",
+            )
+            await self.handle_finish_game(game_id=game.id)
+
+
 
     async def handle_to_queue(
         self,
