@@ -5,5 +5,5 @@ from aiohttp_cors import CorsConfig
 __all__ = ("register_urls",)
 
 
-def register_urls(application: Application, cors: CorsConfig):
+def register_urls(application: Application):
     pass

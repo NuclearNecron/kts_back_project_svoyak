@@ -18,8 +18,8 @@ class BotApi(BaseAccessor):
 
     async def connect(self, app: "Application"):
         self.client = ClientSession()
-        self.poller = Updater(self.app.store)
-        await self.poller.start()
+        self.updater = Updater(self.app)
+        await self.updater.start()
 
     async def disconnect(self, app: "Application"):
         await self.client.close()

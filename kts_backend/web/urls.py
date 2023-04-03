@@ -4,7 +4,9 @@ from aiohttp_cors import CorsConfig
 __all__ = ("register_urls",)
 
 
-def register_urls(application: Application, cors: CorsConfig):
+def register_urls(application: Application):
     import kts_backend.admin.urls
+    import kts_backend.game.urls
 
-    kts_backend.users.urls.register_urls(application, cors)
+    kts_backend.admin.urls.register_urls(application)
+    # kts_backend.game.urls.register_urls(application)
