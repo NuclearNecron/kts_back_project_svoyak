@@ -14,7 +14,7 @@ from kts_backend.store.bot.api.dataclasses import (
     MessageEntity,
     MessageToSend,
     answerCallbackQuery,
-    CallbackQuery,
+    CallbackQuery, User,
 )
 
 if typing.TYPE_CHECKING:
@@ -328,12 +328,24 @@ class Updater:
             text=f"Такой команды не существует",
         )
 
-    async def handle_finish_game(self, game_id: int):
+    async def handle_finish_game(self, game_id: int,chat_id:int,message_thread_id:int,player:User):
         await self.app.store.game.dump_question(game_id=game_id, questions=[])
         await self.app.store.game.change_game_status(
             game_id=game_id, status=GameState.FINISH.value
         )
-        # TO DO Сделать постановку победителя и вызов статистики
+        scores = await self.app.store.game.get_game_scores(game_id=game_id)
+        await self.app.store.game.set_winner(game_id=game_id,player_id=scores[0].player_id)
+        await self.handle_to_queue(
+            chat_id=chat_id,
+            message_thread_id=message_thread_id,
+            text=f"В игре победил {player.username} со счетом {scores[0].score}",
+        )
+        await self.handle_to_queue(
+            chat_id=chat_id,
+            message_thread_id=message_thread_id,
+            text=f"Конечная статистика по игре №{game_id}",
+        )
+        await self.handle_game_stat()
 
     async def handle_playerstat(self, message: MessageUpdate):
         await self.handle_to_queue(
@@ -376,7 +388,8 @@ class Updater:
                 await self.handle_choosing_question(game, callback_query)
 
     async def handle_set_answering(self, game: GameDC, callback: CallbackQuery):
-        requester = self.app.store.game.check_player_in_game(game_id=game.id,player_id=callback.from_user.id
+        requester = self.app.store.game.check_player_in_game(
+            game_id=game.id, player_id=callback.from_user.id
         )
         if requester:
             if (
@@ -387,12 +400,18 @@ class Updater:
                     game_id=game.id, player_id=callback.from_user.id
                 )
                 await asyncio.sleep(game.answer_time)
-                current_game_state = await self.app.store.game.return_current_game(
-                    callback.message.chat.id
+                current_game_state = (
+                    await self.app.store.game.return_current_game(
+                        callback.message.chat.id
+                    )
                 )
-                if current_game_state.state == GameState.QUESTION_ANSWERING.value:
+                if (
+                    current_game_state.state
+                    == GameState.QUESTION_ANSWERING.value
+                ):
                     if (
-                        current_game_state.current_question == game.current_question
+                        current_game_state.current_question
+                        == game.current_question
                         and current_game_state.answering_player_tg_id
                         == game.answering_player_tg_id
                     ):
@@ -442,30 +461,52 @@ class Updater:
                 )
             )
 
-    async def handle_choosing_question(self, game:GameDC, callback:CallbackQuery):
+    async def handle_choosing_question(
+        self, game: GameDC, callback: CallbackQuery
+    ):
         if (
             game.answering_player_tg_id == callback.from_user.id
             and game.state == GameState.QUESTION_SELECT.value
         ):
             callback_data = callback.data.split(";")
             if len(game.remaining_questions) == int(callback_data[1]):
-                await self.app.store.game.change_game_status(game.id, GameState.QUESTION_ANSWERING.value)
-                await self.app.store.game.set_current_question(game_id=game.id,question=int(callback_data[0]))
+                await self.app.store.game.change_game_status(
+                    game.id, GameState.QUESTION_ANSWERING.value
+                )
+                await self.app.store.game.set_current_question(
+                    game_id=game.id, question=int(callback_data[0])
+                )
                 await self.app.store.game.set_answering(game_id=game.id)
                 while True:
                     await asyncio.sleep(game.answer_time)
-                    current_game_state = await self.app.store.game.return_current_game(
-                        callback.message.chat.id
+                    current_game_state = (
+                        await self.app.store.game.return_current_game(
+                            callback.message.chat.id
+                        )
                     )
-                    if (current_game_state.state==GameState.QUESTION_ANSWERING.value
-                            and current_game_state.answering_player_tg_id is None
-                            and current_game_state.current_question == int(callback_data[0])):
-                        await self.app.store.game.change_game_status(game.id, GameState.QUESTION_SELECT.value)
-                        await self.app.store.game.set_current_question(game_id=game.id)
-                        await self.app.store.game.remove_from_remaining(game_id=game.id, question_id=int(callback_data[0]))
-                        await self.app.store.game.set_answering(game_id=game.id,player_id=callback.from_user.id)
-                        if len(current_game_state.remaining_questions)!=1:
-                            questions = await self.app.store.game.get_questions_from_remaining(game_id=game.id)
+                    if (
+                        current_game_state.state
+                        == GameState.QUESTION_ANSWERING.value
+                        and current_game_state.answering_player_tg_id is None
+                        and current_game_state.current_question
+                        == int(callback_data[0])
+                    ):
+                        await self.app.store.game.change_game_status(
+                            game.id, GameState.QUESTION_SELECT.value
+                        )
+                        await self.app.store.game.set_current_question(
+                            game_id=game.id
+                        )
+                        await self.app.store.game.remove_from_remaining(
+                            game_id=game.id, question_id=int(callback_data[0])
+                        )
+                        await self.app.store.game.set_answering(
+                            game_id=game.id, player_id=callback.from_user.id
+                        )
+                        if len(current_game_state.remaining_questions) != 1:
+                            questions = await self.app.store.game.get_questions_from_remaining(
+                                game_id=game.id
+                            )
                             inline_keyboard = InlineKeyboardMarkup(
                                 inline_keyboard=[
                                     [
@@ -504,7 +545,7 @@ class Updater:
                             )
                             break
                         else:
-                            await self.handle_next_round(game,callback)
+                            await self.handle_next_round(game, callback)
                             break
                     else:
                         await self.app.store.tgapi.answerCallbackQuery(
@@ -531,30 +572,49 @@ class Updater:
                     show_alert=False,
                 )
             )
+
     async def handle_text_message(self, message: MessageUpdate):
         game = await self.app.store.game.return_current_game(
             message.message.chat.id
         )
         if game:
-            if game.answering_player_tg_id == message.message.from_user.id and game.state == GameState.QUESTION_ANSWERING.value:
-                answer_result = self.app.store.game.check_answer(question_id= game.current_question,requested_answer=message.message.text)
+            if (
+                game.answering_player_tg_id == message.message.from_user.id
+                and game.state == GameState.QUESTION_ANSWERING.value
+            ):
+                answer_result = self.app.store.game.check_answer(
+                    question_id=game.current_question,
+                    requested_answer=message.message.text,
+                )
                 if answer_result:
-                    await self.handle_right_answer(game,message)
+                    await self.handle_right_answer(game, message)
                 else:
                     await self.handle_wrong_answer(game, message)
-    async def handle_right_answer(self,game:GameDC,message:MessageUpdate):
+
+    async def handle_right_answer(self, game: GameDC, message: MessageUpdate):
         question = await self.app.store.game.get_question(game.current_question)
-        await self.app.store.game.update_player_score(player_id=message.message.from_user.id,game_id=game.id,is_correct=True,add_score=question.cost)
-        await self.app.store.game.change_game_status(game.id, GameState.QUESTION_SELECT.value)
+        await self.app.store.game.update_player_score(
+            player_id=message.message.from_user.id,
+            game_id=game.id,
+            is_correct=True,
+            add_score=question.cost,
+        )
+        await self.app.store.game.change_game_status(
+            game.id, GameState.QUESTION_SELECT.value
+        )
         await self.app.store.game.set_current_question(game_id=game.id)
-        await self.app.store.game.remove_from_remaining(game_id=game.id, question_id=question.id)
+        await self.app.store.game.remove_from_remaining(
+            game_id=game.id, question_id=question.id
+        )
         await self.handle_to_queue(
             chat_id=message.message.chat.id,
             message_thread_id=message.message.message_thread_id,
             reply_to_message_id=message.message.message_id,
             text=f"Вы ответили правильно!",
         )
-        player_score = await self.app.store.game.get_player_score(game_id=game.id,player_id=message.message.from_user.id)
+        player_score = await self.app.store.game.get_player_score(
+            game_id=game.id, player_id=message.message.from_user.id
+        )
         await self.handle_to_queue(
             chat_id=message.message.chat.id,
             message_thread_id=message.message.message_thread_id,
@@ -562,7 +622,9 @@ class Updater:
             text=f"Ваш новый счет: {player_score.score}",
         )
         if len(game.remaining_questions) != 1:
-            questions = await self.app.store.game.get_questions_from_remaining(game_id=game.id)
+            questions = await self.app.store.game.get_questions_from_remaining(
+                game_id=game.id
+            )
             inline_keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -596,9 +658,14 @@ class Updater:
         else:
             await self.handle_next_round(game, message)
 
-    async def handle_wrong_answer(self,game:GameDC,message:MessageUpdate):
+    async def handle_wrong_answer(self, game: GameDC, message: MessageUpdate):
         question = await self.app.store.game.get_question(game.current_question)
-        await self.app.store.game.update_player_score(player_id=message.message.from_user.id,game_id=game.id,is_correct=False,add_score=question.cost)
+        await self.app.store.game.update_player_score(
+            player_id=message.message.from_user.id,
+            game_id=game.id,
+            is_correct=False,
+            add_score=question.cost,
+        )
         await self.app.store.game.set_answering(game_id=game.id)
         await self.handle_to_queue(
             chat_id=message.message.chat.id,
@@ -606,7 +673,19 @@ class Updater:
             reply_to_message_id=message.message.message_id,
             text=f"Вы ответили неправильно!",
         )
-    async def handle_next_round(self,game:GameDC, response:MessageUpdate|CallbackQuery):
+        player_score = await self.app.store.game.get_player_score(
+            game_id=game.id, player_id=message.message.from_user.id
+        )
+        await self.handle_to_queue(
+            chat_id=message.message.chat.id,
+            message_thread_id=message.message.message_thread_id,
+            reply_to_message_id=message.message.message_id,
+            text=f"Ваш новый счет: {player_score.score}",
+        )
+
+    async def handle_next_round(
+        self, game: GameDC, response: MessageUpdate | CallbackQuery
+    ):
         await self.app.store.game.set_next_round(game_id=game.id)
         questionres = await self.app.store.game.get_round(game_id=game.id)
         if questionres:
@@ -641,7 +720,7 @@ class Updater:
                 message_thread_id=response.message.message_thread_id,
                 text="Вопросы для выбора",
             )
-            if type(response)==MessageUpdate:
+            if type(response) == MessageUpdate:
                 await self.handle_to_queue(
                     chat_id=response.message.chat.id,
                     message_thread_id=response.message.message_thread_id,
@@ -655,13 +734,11 @@ class Updater:
                 )
         else:
             await self.handle_to_queue(
-                    chat_id=response.message.chat.id,
-                    message_thread_id=response.message.message_thread_id,
-                    text=f"Все вопросы вышли",
+                chat_id=response.message.chat.id,
+                message_thread_id=response.message.message_thread_id,
+                text=f"Все вопросы вышли",
             )
             await self.handle_finish_game(game_id=game.id)
-
-
 
     async def handle_to_queue(
         self,

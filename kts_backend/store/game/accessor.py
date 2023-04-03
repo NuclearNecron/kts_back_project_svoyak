@@ -544,7 +544,9 @@ class GameAccessor(BaseAccessor):
                 )
                 res = await session.scalars(query)
                 result = res.all()
-                list_of_answers = [answer.to_dc().text.lower() for answer in result]
+                list_of_answers = [
+                    answer.to_dc().text.lower() for answer in result
+                ]
                 if requested_answer.lower() in list_of_answers:
                     return True
                 else:
