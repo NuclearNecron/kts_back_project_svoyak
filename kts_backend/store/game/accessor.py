@@ -18,7 +18,7 @@ from kts_backend.game.dataclasses import (
     GameDC,
     GameState,
     GameScoreDC,
-    GameTheme,
+    GameTheme, PlayerScore,
 )
 
 from kts_backend.game.models import (
@@ -105,6 +105,24 @@ class GameAccessor(BaseAccessor):
                         (GameModel.chat_id == chat_id)
                         & (GameModel.state != GameState.FINISH.value)
                     )
+                    .order_by(GameModel.created_at)
+                    .limit(1)
+                )
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
+                    return result.to_dc()
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def return_last_game(self, chat_id: int) -> GameDC | None:
+        try:
+            async with self.app.database.session() as session:
+                query = (
+                    select(GameModel)
+                    .where(GameModel.chat_id == chat_id)
                     .order_by(GameModel.created_at)
                     .limit(1)
                 )
@@ -502,6 +520,30 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
+    async def get_game_scores_with_players(self, game_id: int) -> list[PlayerScore] | None:
+        try:
+            async with self.app.database.session() as session:
+                query = (
+                    select(GameScoreModel)
+                    .where(GameScoreModel.game_id == game_id)
+                    .options(selectinload(GameScoreModel.player))
+                    .order_by(desc(GameScoreModel.score))
+                )
+                res = await session.scalars(query)
+                results = res.all()
+                if results:
+                    ret_result = [
+                            PlayerScore(
+                                score = score.to_dc(),
+                                player=score.player.to_dc()
+                            )
+                            for score in results
+                    ]
+                    return ret_result
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
     async def dump_question(
         self, game_id: int, questions: list[int] | None = None
     ) -> bool | None:
