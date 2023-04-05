@@ -6,4 +6,10 @@ __all__ = ("register_urls",)
 
 
 def register_urls(application: Application):
-    pass
+    from kts_backend.admin.views import AdminLoginView
+    from kts_backend.admin.views import AdminCreate
+    from kts_backend.admin.views import AdminCurrentView
+
+    application.router.add_view("/admin.login", AdminLoginView)
+    application.router.add_view("/admin.current", AdminCurrentView)
+    application.router.add_view("/admin.create", AdminCreate)

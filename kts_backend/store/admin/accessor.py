@@ -1,4 +1,5 @@
 import typing
+from hashlib import sha256
 
 from sqlalchemy import select
 
@@ -10,20 +11,22 @@ if typing.TYPE_CHECKING:
 
 
 class AdminAccessor(BaseAccessor):
-    async def get_by_email(self, email: str) -> Admin | None:
+    async def get_by_login(self, login: str) -> Admin | None:
         async with self.app.database.session() as session:
-            query = select(AdminModel).where(AdminModel.email == email)
+            query = select(AdminModel).where(AdminModel.login == login)
             res = await session.scalars(query)
             admin = res.one_or_none()
             if admin:
                 return Admin(
-                    id=admin.id, email=admin.email, password=admin.password
+                    id=admin.id, login=admin.login, password=admin.password
                 )
             return None
 
-    async def create_admin(self, email: str, password: str) -> Admin:
+    async def create_admin(self, login: str, password: str) -> Admin:
         async with self.app.database.session() as session:
-            admin = AdminModel(email=email, password=password)
+            admin = AdminModel(
+                login=login, password=sha256(password.encode()).hexdigest()
+            )
             session.add(admin)
             await session.commit()
-            return Admin(id=admin.id, email=admin.email)
+            return Admin(id=admin.id, login=admin.login)

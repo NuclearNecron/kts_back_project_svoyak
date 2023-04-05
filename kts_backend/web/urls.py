@@ -9,4 +9,4 @@ def register_urls(application: Application):
     import kts_backend.game.urls
 
     kts_backend.admin.urls.register_urls(application)
-    # kts_backend.game.urls.register_urls(application)
+    kts_backend.game.urls.register_urls(application)

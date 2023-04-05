@@ -187,7 +187,7 @@ class QuestionPackModel(db):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     admin_id = Column(
-        Integer, ForeignKey("admin.id", ondelete="cascade"), nullable=False
+        Integer, ForeignKey("admin.id", ondelete="cascade"), nullable=True
     )
 
     __table_args__ = (UniqueConstraint("name", name="_names_pack"),)

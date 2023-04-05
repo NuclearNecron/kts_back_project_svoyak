@@ -6,7 +6,8 @@ from aiohttp.web import (
     Request as AiohttpRequest,
 )
 from aiohttp_apispec import setup_aiohttp_apispec
-
+from aiohttp_session.cookie_storage import EncryptedCookieStorage
+from aiohttp_session import setup as session_setup
 from kts_backend import __appname__
 
 # __version__
@@ -20,6 +21,7 @@ __all__ = ("Application",)
 
 from kts_backend.store import Store, setup_store
 from kts_backend.store.database.database import Database
+from ..admin.model import Admin
 
 
 class Application(AiohttpApplication):
@@ -29,7 +31,7 @@ class Application(AiohttpApplication):
 
 
 class Request(AiohttpRequest):
-    # user: Optional[User] = None
+    admin: Admin | None = None
 
     @property
     def app(self) -> Application:
@@ -57,10 +59,11 @@ class View(AiohttpView):
 app = Application()
 
 
-
 def setup_app(config_path: str) -> Application:
+
     setup_logging(app)
     setup_config(app, config_path)
+    session_setup(app, EncryptedCookieStorage(app.config.session.key))
     register_urls(app)
     setup_aiohttp_apispec(
         app, title="Svoyak bot", url="/docs/json", swagger_path="/docs"

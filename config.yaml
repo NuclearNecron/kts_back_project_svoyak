@@ -6,7 +6,8 @@ sentry:
   dsn:
   env: dev
 
-store: {}
+session:
+  key: CaY5iCkYtN7DqXdiYK1BvmGrQuaSA4Tl4bEk9my0jc0=
 
 database:
   host: localhost

@@ -20,6 +20,8 @@ from kts_backend.game.dataclasses import (
     GameScoreDC,
     GameTheme,
     PlayerScore,
+    RoundComplex,
+    FullQuestion,
 )
 
 from kts_backend.game.models import (
@@ -49,10 +51,17 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
-    async def create_round(self, number: int, pack: int) -> RoundDC | None:
+    async def create_round(self, pack: int) -> RoundDC | None:
         try:
             async with self.app.database.session() as session:
-                new_round = RoundModel(number=number, pack_id=pack)
+                query = (
+                    select(func.count())
+                    .select_from(RoundModel)
+                    .where(RoundModel.pack_id == pack)
+                )
+                res = await session.scalars(query)
+                amount = res.one_or_none()
+                new_round = RoundModel(number=amount + 1, pack_id=pack)
                 session.add(new_round)
                 await session.commit()
                 return new_round.to_dc()
@@ -260,12 +269,12 @@ class GameAccessor(BaseAccessor):
     ) -> GameScoreDC | None:
         try:
             async with self.app.database.session() as session:
-                await self.change_player_games(player_id, True)
                 new_player_score = GameScoreModel(
                     player_id=player_id, game_id=game_id
                 )
                 session.add(new_player_score)
                 await session.commit()
+                await self.change_player_games(player_id, True)
                 return new_player_score.to_dc()
 
         except sqlalchemy.exc.IntegrityError:
@@ -630,17 +639,25 @@ class GameAccessor(BaseAccessor):
                 question_list = await self.get_remaining_questions(game_id)
                 if question_list:
                     query1 = (
-                        select(ThemeModel)
-                        .join(
-                            QuestionModel,
-                            ThemeModel.id == QuestionModel.theme_id,
-                        )).filter(QuestionModel.id.in_(question_list)).group_by(ThemeModel.id)
-                    query2 = select(QuestionModel).where(QuestionModel.id.in_(question_list)).order_by(QuestionModel.cost)
+                        (
+                            select(ThemeModel).join(
+                                QuestionModel,
+                                ThemeModel.id == QuestionModel.theme_id,
+                            )
+                        )
+                        .filter(QuestionModel.id.in_(question_list))
+                        .group_by(ThemeModel.id)
+                    )
+                    query2 = (
+                        select(QuestionModel)
+                        .where(QuestionModel.id.in_(question_list))
+                        .order_by(QuestionModel.cost)
+                    )
                     resulttheme = await session.scalars(query1)
                     theme_res = resulttheme.all()
-                    resultquest =  await session.scalars(query2)
+                    resultquest = await session.scalars(query2)
                     quest_res = resultquest.all()
-                    print(theme_res,quest_res)
+                    print(theme_res, quest_res)
                     if theme_res and quest_res:
                         ret_result = [
                             GameTheme(
@@ -648,7 +665,7 @@ class GameAccessor(BaseAccessor):
                                     id=theme.id,
                                     round_id=theme.round_id,
                                     name=theme.name,
-                                    description=theme.description
+                                    description=theme.description,
                                 ),
                                 questions=[
                                     QuestionDC(
@@ -657,7 +674,8 @@ class GameAccessor(BaseAccessor):
                                         theme_id=question.theme_id,
                                         cost=question.cost,
                                     )
-                                    for question in quest_res if question.theme_id==theme.id
+                                    for question in quest_res
+                                    if question.theme_id == theme.id
                                 ],
                             )
                             for theme in theme_res
@@ -711,13 +729,188 @@ class GameAccessor(BaseAccessor):
     ) -> bool | None:
         try:
             async with self.app.database.session() as session:
-                    upd_query = (
-                        update(GameModel)
-                        .where(GameModel.id == game_id)
-                        .values(current_question=question)
-                    )
-                    await session.execute(upd_query)
-                    await session.commit()
+                upd_query = (
+                    update(GameModel)
+                    .where(GameModel.id == game_id)
+                    .values(current_question=question)
+                )
+                await session.execute(upd_query)
+                await session.commit()
+                return True
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_pack(self) -> list[QuestionPackDC] | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(QuestionPackModel)
+                res = await session.scalars(query)
+                result = res.all()
+                if result:
+                    return [pack.to_dc() for pack in result]
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_rounds(self, pack: int) -> list[RoundComplex] | None:
+        try:
+            async with self.app.database.session() as session:
+                query = (
+                    select(RoundModel)
+                    .where(RoundModel.pack_id == pack)
+                    .options(selectinload(RoundModel.themes))
+                )
+                res = await session.scalars(query)
+                result = res.all()
+                if result:
+                    return [
+                        RoundComplex(
+                            round=round.to_dc(),
+                            themes=[theme.to_dc() for theme in round.themes],
+                        )
+                        for round in result
+                    ]
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_themes(self, round_id: int) -> list[GameTheme] | None:
+        try:
+            async with self.app.database.session() as session:
+                query = (
+                    select(ThemeModel)
+                    .where(ThemeModel.round_id == round_id)
+                    .options(selectinload(ThemeModel.questions))
+                )
+                res = await session.scalars(query)
+                result = res.all()
+                if result:
+                    return [
+                        GameTheme(
+                            theme=theme.to_dc(),
+                            questions=[
+                                question.to_dc() for question in theme.questions
+                            ],
+                        )
+                        for theme in result
+                    ]
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_questions(self, theme_id: int) -> list[FullQuestion] | None:
+        try:
+            async with self.app.database.session() as session:
+                query = (
+                    select(QuestionModel)
+                    .where(QuestionModel.theme_id == theme_id)
+                    .options(selectinload(QuestionModel.answers))
+                )
+                res = await session.scalars(query)
+                result = res.all()
+                if result:
+                    return [
+                        FullQuestion(
+                            question=question.to_dc(),
+                            answer=[
+                                answer.to_dc() for answer in question.answers
+                            ],
+                        )
+                        for question in result
+                    ]
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def check_pack(self, admin_id: int, pack: int) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(QuestionPackModel).where(
+                    (QuestionPackModel.admin_id == admin_id)
+                    & (QuestionPackModel.id == pack)
+                )
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
                     return True
+                else:
+                    return False
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_single_pack(self,pack_id: int) -> QuestionPackDC | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(QuestionPackModel).where(QuestionPackModel.id==pack_id)
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
+                    return result.to_dc()
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_single_round(self,round_id: int) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(RoundModel).where(RoundModel.id==int(round_id))
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
+                    return True
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+
+    async def check_round(self, admin_id: int, round_id: int) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(RoundModel).options(selectinload(RoundModel.pack)).where(
+                    (RoundModel.pack.admin_id == admin_id)
+                    & (RoundModel.id == round_id)
+                )
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
+                    return True
+                else:
+                    return False
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+
+    async def get_single_theme(self,theme_id: int) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(ThemeModel).where(ThemeModel.id==int(theme_id))
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
+                    return True
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def check_theme(self, admin_id: int, theme_id: int) -> bool | None:
+        try:
+            async with self.app.database.session() as session:
+                query = select(ThemeModel).options(selectinload(ThemeModel.round)).options(selectinload(ThemeModel.round.pack)).where(
+                    (ThemeModel.round.pack.admin_id == admin_id)
+                    & (RoundModel.id == theme_id)
+                )
+                res = await session.scalars(query)
+                result = res.one_or_none()
+                if result:
+                    return True
+                else:
+                    return False
         except sqlalchemy.exc.IntegrityError:
             return None

@@ -10,6 +10,11 @@ __all__ = ("Config", "setup_config")
 
 
 @dataclass
+class SessionConfig:
+    key: str
+
+
+@dataclass
 class TGBotConfig:
     token: str
 
@@ -27,6 +32,7 @@ class DatabaseConfig:
 class Config:
     tgbot: TGBotConfig = None
     database: DatabaseConfig = None
+    session: SessionConfig | None = None
 
 
 def setup_config(app: "Application", config_path: str):
@@ -34,6 +40,9 @@ def setup_config(app: "Application", config_path: str):
         raw_config = yaml.safe_load(f)
 
     app.config = Config(
+        session=SessionConfig(
+            key=raw_config["session"]["key"],
+        ),
         tgbot=TGBotConfig(
             token=raw_config["bot"]["tg"]["token"],
         ),

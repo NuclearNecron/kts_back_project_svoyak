@@ -21,7 +21,7 @@ if typing.TYPE_CHECKING:
 async def auth_middleware(request: "Request", handler: callable):
     session = await get_session(request)
     if session:
-        request.admin = Admin.from_session(session)
+        request.admin = Admin.from_session(session=session)
     return await handler(request)
 
 
@@ -64,11 +64,4 @@ async def error_handling_middleware(request: "Request", handler):
 def setup_middlewares(app: "Application"):
     app.middlewares.append(auth_middleware)
     app.middlewares.append(error_handling_middleware)
-    app.middlewares.append(
-        session_middleware(
-            EncryptedCookieStorage(
-                Fernet.generate_key().decode(), max_age=24 * 60 * 60
-            )
-        )
-    )
     app.middlewares.append(validation_middleware)

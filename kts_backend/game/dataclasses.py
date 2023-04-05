@@ -97,3 +97,15 @@ class GameTheme:
 class PlayerScore:
     score: GameScoreDC
     player: PlayerDC
+
+
+@dataclass
+class RoundComplex:
+    round: RoundDC
+    themes: list[ThemeDC] | None
+
+
+@dataclass
+class FullQuestion:
+    question: QuestionDC
+    answer: list[AnswersDC] | None

@@ -180,7 +180,7 @@ class Updater:
         chat_id: int,
         owner_id: int,
         message_thread_id: int | None = None,
-        time_to_start: int = 5,
+        time_to_start: int = 30,
         min_number_of_players: int = 1,
     ) -> None:
         await asyncio.sleep(time_to_start)
@@ -198,7 +198,12 @@ class Updater:
             await self.app.store.game.change_game_status(
                 game_id, GameState.START.value
             )
-            await self.app.store.game.get_random_pack(game_id)
+            selected_pack = await self.app.store.game.get_random_pack(game_id)
+            await self.handle_to_queue(
+                chat_id=chat_id,
+                message_thread_id=message_thread_id,
+                text=f"""Будем играть в пакет {selected_pack.name}. {"%0AОписание" + selected_pack.description if selected_pack.description else "%0AОписание не было представлено"}""",
+            )
             questionres = await self.app.store.game.get_round(game_id)
             question_list = []
             for theme in questionres:
@@ -337,11 +342,11 @@ class Updater:
             game_id=game_id, status=GameState.FINISH.value
         )
         scores = await self.app.store.game.get_game_scores(game_id=game_id)
-        await self.app.store.game.set_winner(game_id=game_id,player_id=scores[0].player_id)
+        winner = await self.app.store.game.set_winner(game_id=game_id,player_id=scores[0].player_id)
         await self.handle_to_queue(
             chat_id=chat_id,
             message_thread_id=message_thread_id,
-            text=f"В игре победил {player.username if player.username else player.first_name} со счетом {scores[0].score}",
+            text=f"В игре победил {winner.username if winner.username else winner.name} со счетом {scores[0].score}",
         )
         await self.handle_to_queue(
             chat_id=chat_id,
@@ -424,6 +429,11 @@ class Updater:
             ):
                 await self.app.store.game.set_answering(
                     game_id=game.id, player_id=callback.from_user.id
+                )
+                await self.handle_to_queue(
+                    chat_id=callback.message.chat.id,
+                    message_thread_id=callback.message.message_thread_id,
+                    text=f"Отвечает {callback.from_user.username if callback.from_user.username else callback.from_user.first_name}",
                 )
                 await asyncio.sleep(game.answer_time)
                 current_game_state = (
