@@ -842,10 +842,12 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
-    async def get_single_pack(self,pack_id: int) -> QuestionPackDC | None:
+    async def get_single_pack(self, pack_id: int) -> QuestionPackDC | None:
         try:
             async with self.app.database.session() as session:
-                query = select(QuestionPackModel).where(QuestionPackModel.id==pack_id)
+                query = select(QuestionPackModel).where(
+                    QuestionPackModel.id == pack_id
+                )
                 res = await session.scalars(query)
                 result = res.one_or_none()
                 if result:
@@ -855,10 +857,10 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
-    async def get_single_round(self,round_id: int) -> bool | None:
+    async def get_single_round(self, round_id: int) -> bool | None:
         try:
             async with self.app.database.session() as session:
-                query = select(RoundModel).where(RoundModel.id==int(round_id))
+                query = select(RoundModel).where(RoundModel.id == int(round_id))
                 res = await session.scalars(query)
                 result = res.one_or_none()
                 if result:
@@ -868,13 +870,16 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
-
     async def check_round(self, admin_id: int, round_id: int) -> bool | None:
         try:
             async with self.app.database.session() as session:
-                query = select(RoundModel).options(selectinload(RoundModel.pack)).where(
-                    (RoundModel.pack.admin_id == admin_id)
-                    & (RoundModel.id == round_id)
+                query = (
+                    select(RoundModel)
+                    .options(selectinload(RoundModel.pack))
+                    .where(
+                        (RoundModel.pack.admin_id == admin_id)
+                        & (RoundModel.id == round_id)
+                    )
                 )
                 res = await session.scalars(query)
                 result = res.one_or_none()
@@ -885,11 +890,10 @@ class GameAccessor(BaseAccessor):
         except sqlalchemy.exc.IntegrityError:
             return None
 
-
-    async def get_single_theme(self,theme_id: int) -> bool | None:
+    async def get_single_theme(self, theme_id: int) -> bool | None:
         try:
             async with self.app.database.session() as session:
-                query = select(ThemeModel).where(ThemeModel.id==int(theme_id))
+                query = select(ThemeModel).where(ThemeModel.id == int(theme_id))
                 res = await session.scalars(query)
                 result = res.one_or_none()
                 if result:
@@ -902,9 +906,14 @@ class GameAccessor(BaseAccessor):
     async def check_theme(self, admin_id: int, theme_id: int) -> bool | None:
         try:
             async with self.app.database.session() as session:
-                query = select(ThemeModel).options(selectinload(ThemeModel.round)).options(selectinload(ThemeModel.round.pack)).where(
-                    (ThemeModel.round.pack.admin_id == admin_id)
-                    & (RoundModel.id == theme_id)
+                query = (
+                    select(ThemeModel)
+                    .options(selectinload(ThemeModel.round))
+                    .options(selectinload(ThemeModel.round.pack))
+                    .where(
+                        (ThemeModel.round.pack.admin_id == admin_id)
+                        & (RoundModel.id == theme_id)
+                    )
                 )
                 res = await session.scalars(query)
                 result = res.one_or_none()

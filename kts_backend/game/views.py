@@ -2,10 +2,16 @@ from aiohttp.web_exceptions import (
     HTTPUnauthorized,
     HTTPConflict,
     HTTPBadRequest,
-    HTTPForbidden, HTTPNotFound,
+    HTTPForbidden,
+    HTTPNotFound,
 )
 
-from kts_backend.game.schemas import PackSchema, RoundSchema, ThemeSchema, QuestionSchema
+from kts_backend.game.schemas import (
+    PackSchema,
+    RoundSchema,
+    ThemeSchema,
+    QuestionSchema,
+)
 from kts_backend.web.app import View
 from aiohttp_apispec import (
     request_schema,
@@ -114,6 +120,8 @@ class RoundCreate(AuthRequiredMixin, View):
                     "pack_id": new_round.pack_id,
                 }
             )
+
+
 class RoundGet(AuthRequiredMixin, View):
     @docs(
         tags=["game"],
@@ -138,19 +146,26 @@ class RoundGet(AuthRequiredMixin, View):
             raise HTTPNotFound
         rounds = await self.request.app.store.game.get_rounds(pack=int(pack_id))
         return json_response(
-                data={"rounds":[
+            data={
+                "rounds": [
                     {
-                        "id":round.round.id,
-                        "number":round.round.number,
-                        "pack_id":round.round.pack_id,
-                        "themes":[{
-                            "id":theme.id,
-                            "name":theme.name,
-                            "round_id":theme.round_id,
-                            "description":theme.description,
-                        }for theme in round.themes]
-                    }for round in rounds]}
-            )
+                        "id": round.round.id,
+                        "number": round.round.number,
+                        "pack_id": round.round.pack_id,
+                        "themes": [
+                            {
+                                "id": theme.id,
+                                "name": theme.name,
+                                "round_id": theme.round_id,
+                                "description": theme.description,
+                            }
+                            for theme in round.themes
+                        ],
+                    }
+                    for round in rounds
+                ]
+            }
+        )
 
 
 class ThemeCreate(AuthRequiredMixin, View):
@@ -180,8 +195,8 @@ class ThemeCreate(AuthRequiredMixin, View):
         else:
             new_theme = await self.request.app.store.game.create_theme(
                 round=int(self.data["pack_id"]),
-                name = self.data["name"],
-                description=self.data["description"]
+                name=self.data["name"],
+                description=self.data["description"],
             )
             if new_theme is None:
                 raise HTTPConflict
@@ -190,9 +205,10 @@ class ThemeCreate(AuthRequiredMixin, View):
                     "id": new_theme.id,
                     "name": new_theme.name,
                     "description": new_theme.description,
-                    "round_id": new_theme.round_id
+                    "round_id": new_theme.round_id,
                 }
             )
+
 
 class ThemeGet(AuthRequiredMixin, View):
     @docs(
@@ -215,19 +231,27 @@ class ThemeGet(AuthRequiredMixin, View):
             raise HTTPNotFound
         themes = await self.request.app.store.game.get_themes(round_id=round_id)
         return json_response(
-                data={"themes":[
+            data={
+                "themes": [
                     {
-                        "id":theme.theme.id,
-                        "name":theme.theme.name,
-                        "rounds_id":theme.theme.round_id,
-                        "description":theme.theme.description,
-                        "questions":[{
-                            "id":question.id,
-                            "name":question.name,
-                            "cost":question.cost,
-                        }for question in theme.questions]
-                    }for theme in themes]}
-            )
+                        "id": theme.theme.id,
+                        "name": theme.theme.name,
+                        "rounds_id": theme.theme.round_id,
+                        "description": theme.theme.description,
+                        "questions": [
+                            {
+                                "id": question.id,
+                                "name": question.name,
+                                "cost": question.cost,
+                            }
+                            for question in theme.questions
+                        ],
+                    }
+                    for theme in themes
+                ]
+            }
+        )
+
 
 class QuestionCreate(AuthRequiredMixin, View):
     @docs(
@@ -254,10 +278,12 @@ class QuestionCreate(AuthRequiredMixin, View):
                 raise HTTPForbidden
             else:
                 answers = self.data["answers"]
-                new_question = await self.request.app.store.game.create_question(
-                    theme=int(self.data["theme_id"]),
-                    name=self.data["name"],
-                    cost=self.data["cost"]
+                new_question = (
+                    await self.request.app.store.game.create_question(
+                        theme=int(self.data["theme_id"]),
+                        name=self.data["name"],
+                        cost=self.data["cost"],
+                    )
                 )
                 if new_question is None:
                     raise HTTPConflict
@@ -266,7 +292,9 @@ class QuestionCreate(AuthRequiredMixin, View):
         else:
             new_answers = []
             for answer in answers:
-                new_answer = await self.request.app.store.game.create_answer(question=new_question.id, text=answer["text"])
+                new_answer = await self.request.app.store.game.create_answer(
+                    question=new_question.id, text=answer["text"]
+                )
                 new_answers.append(new_answer)
         return json_response(
             data={
@@ -274,10 +302,9 @@ class QuestionCreate(AuthRequiredMixin, View):
                 "name": new_question.name,
                 "cost": new_question.description,
                 "theme_id": new_question.theme_id,
-                "answers":[{"text":answer.text}for answer in new_answers]
+                "answers": [{"text": answer.text} for answer in new_answers],
             }
         )
-
 
 
 class QuestionGet(AuthRequiredMixin, View):
@@ -299,17 +326,26 @@ class QuestionGet(AuthRequiredMixin, View):
         )
         if existence is None:
             raise HTTPNotFound
-        questions = await self.request.app.store.game.get_questions(theme_id=theme_id)
+        questions = await self.request.app.store.game.get_questions(
+            theme_id=theme_id
+        )
         return json_response(
-                data={"questions":[
+            data={
+                "questions": [
                     {
-                        "id":question.question.id,
-                        "name":question.question.name,
-                        "theme_id":question.question.theme_id,
-                        "cost":question.question.cost,
-                        "answers":[{
-                            "id":answer.id,
-                            "text":answer.text,
-                        }for answer in question.answer]
-                    }for question in questions]}
-            )
+                        "id": question.question.id,
+                        "name": question.question.name,
+                        "theme_id": question.question.theme_id,
+                        "cost": question.question.cost,
+                        "answers": [
+                            {
+                                "id": answer.id,
+                                "text": answer.text,
+                            }
+                            for answer in question.answer
+                        ],
+                    }
+                    for question in questions
+                ]
+            }
+        )
