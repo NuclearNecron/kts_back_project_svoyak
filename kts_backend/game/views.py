@@ -83,7 +83,7 @@ class GetPacks(AuthRequiredMixin, View):
         )
 
 
-class RoundCreate(AuthRequiredMixin, View):
+class   RoundCreate(AuthRequiredMixin, View):
     @docs(
         tags=["game"],
         summary="create round",
@@ -183,7 +183,7 @@ class ThemeCreate(AuthRequiredMixin, View):
             raise HTTPBadRequest
         admin = self.request.admin
         existence = await self.request.app.store.game.get_single_round(
-            pack_id=self.data["round_id"]
+            round_id=self.data["round_id"]
         )
         if existence is None:
             raise HTTPNotFound
@@ -194,7 +194,7 @@ class ThemeCreate(AuthRequiredMixin, View):
             raise HTTPForbidden
         else:
             new_theme = await self.request.app.store.game.create_theme(
-                round=int(self.data["pack_id"]),
+                round=int(self.data["round_id"]),
                 name=self.data["name"],
                 description=self.data["description"],
             )
@@ -300,7 +300,7 @@ class QuestionCreate(AuthRequiredMixin, View):
             data={
                 "id": new_question.id,
                 "name": new_question.name,
-                "cost": new_question.description,
+                "cost": new_question.cost,
                 "theme_id": new_question.theme_id,
                 "answers": [{"text": answer.text} for answer in new_answers],
             }

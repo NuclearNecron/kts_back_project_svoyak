@@ -877,7 +877,7 @@ class GameAccessor(BaseAccessor):
                     select(RoundModel)
                     .options(selectinload(RoundModel.pack))
                     .where(
-                        (RoundModel.pack.admin_id == admin_id)
+                        (QuestionPackModel.admin_id == admin_id)
                         & (RoundModel.id == round_id)
                     )
                 )
@@ -908,11 +908,10 @@ class GameAccessor(BaseAccessor):
             async with self.app.database.session() as session:
                 query = (
                     select(ThemeModel)
-                    .options(selectinload(ThemeModel.round))
-                    .options(selectinload(ThemeModel.round.pack))
+                    .options(selectinload(ThemeModel.round).subqueryload(RoundModel.pack))
                     .where(
-                        (ThemeModel.round.pack.admin_id == admin_id)
-                        & (RoundModel.id == theme_id)
+                        (QuestionPackModel.admin_id == admin_id)
+                        & (ThemeModel.id == theme_id)
                     )
                 )
                 res = await session.scalars(query)

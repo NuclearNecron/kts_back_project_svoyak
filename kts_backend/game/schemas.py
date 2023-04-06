@@ -2,7 +2,7 @@ from marshmallow import Schema, fields
 
 
 class PackSchema(Schema):
-    name = fields.Int(required=True)
+    name = fields.Str(required=True)
     description = fields.Str(required=False)
 
 
