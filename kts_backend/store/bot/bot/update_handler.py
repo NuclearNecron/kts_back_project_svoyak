@@ -1,4 +1,5 @@
 from asyncio import Task
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 
@@ -202,7 +203,7 @@ class Updater:
             await self.handle_to_queue(
                 chat_id=chat_id,
                 message_thread_id=message_thread_id,
-                text=f"""Будем играть в пакет {selected_pack.name}. {"%0AОписание" + selected_pack.description if selected_pack.description else "%0AОписание не было представлено"}""",
+                text=f"""Будем играть в пакет {selected_pack.name}. {"%0AОписание: " + selected_pack.description if selected_pack.description else "%0AОписание не было представлено"}""",
             )
             questionres = await self.app.store.game.get_round(game_id)
             question_list = []
@@ -230,8 +231,8 @@ class Updater:
             await self.app.store.game.dump_question(
                 game_id=game_id, questions=question_list
             )
-            data = await self.app.store.tgapi.send_inline_keyboard(
-                inline_keyboard=inline_keyboard,
+            await self.handle_to_queue(
+                reply_markup=inline_keyboard,
                 chat_id=chat_id,
                 message_thread_id=message_thread_id,
                 text="Вопросы для выбора",
@@ -277,6 +278,18 @@ class Updater:
                         reply_to_message_id=message.message.message_id,
                         text=f"Игрок {message.message.from_user.username if message.message.from_user.username else message.message.from_user.first_name} покинул игру.",
                     )
+                    current_amount_of_players = (
+                        await self.app.store.game.get_amount_of_players(game.id)
+                    )
+                    if current_amount_of_players == 0:
+                        await self.handle_to_queue(
+                            chat_id=message.message.chat.id,
+                            message_thread_id=message.message.message_thread_id,
+                            text=f"Все игроки вышли",
+                        )
+                        await self.handle_finish_game(game_id=game.id, chat_id=message.message.chat.id,
+                                                      message_thread_id=message.message.message_thread_id,
+                                                      player=player)
                 else:
                     await self.handle_to_queue(
                         chat_id=message.message.chat.id,
@@ -339,7 +352,7 @@ class Updater:
     async def handle_finish_game(self, game_id: int,chat_id:int,message_thread_id:int,player:User):
         await self.app.store.game.dump_question(game_id=game_id, questions=[])
         await self.app.store.game.change_game_status(
-            game_id=game_id, status=GameState.FINISH.value
+            game_id=game_id, status=GameState.FINISH.value, time =datetime.now()
         )
         scores = await self.app.store.game.get_game_scores(game_id=game_id)
         winner = await self.app.store.game.set_winner(game_id=game_id,player_id=scores[0].player_id)
@@ -526,8 +539,8 @@ class Updater:
                     ]
                 )
                 question = await self.app.store.game.get_question(int(callback_data[0]))
-                data = await self.app.store.tgapi.send_inline_keyboard(
-                    inline_keyboard=inline_keyboard,
+                await self.handle_to_queue(
+                    reply_markup=inline_keyboard,
                     chat_id=callback.message.chat.id,
                     message_thread_id=callback.message.message_thread_id,
                     text=question.name,
@@ -553,6 +566,17 @@ class Updater:
                             await self.app.store.game.set_answering(
                                 game_id=game.id, player_id=callback.from_user.id
                             )
+                            answers = await self.app.store.game.get_answers(int(callback_data[0]))
+                            if answers:
+                                text = f"Никто не ответил на вопрос, Правильные ответы: "
+                                text+= "; ".join([answer.text for answer in answers])
+                            else:
+                                text = "Вопрос был ловушкой. Правильного овтета нет. ХАХАХАХААХАХ"
+                            await self.handle_to_queue(
+                                chat_id=callback.message.chat.id,
+                                message_thread_id=callback.message.message_thread_id,
+                                text=text,
+                            )
                             if len(current_game_state.remaining_questions) != 1:
                                 questions = await self.app.store.game.get_questions_from_remaining(
                                     game_id=game.id
@@ -575,8 +599,8 @@ class Updater:
                                         for theme in questions
                                     ]
                                 )
-                                data = await self.app.store.tgapi.send_inline_keyboard(
-                                    inline_keyboard=inline_keyboard,
+                                await self.handle_to_queue(
+                                    reply_markup=inline_keyboard,
                                     chat_id=callback.message.chat.id,
                                     message_thread_id=callback.message.message_thread_id,
                                     text="Вопросы для выбора",
@@ -703,8 +727,8 @@ class Updater:
                     for theme in questions
                 ]
             )
-            data = await self.app.store.tgapi.send_inline_keyboard(
-                inline_keyboard=inline_keyboard,
+            data = await self.handle_to_queue(
+                reply_markup=inline_keyboard,
                 chat_id=message.message.chat.id,
                 message_thread_id=message.message.message_thread_id,
                 text="Вопросы для выбора",
@@ -774,8 +798,8 @@ class Updater:
             await self.app.store.game.dump_question(
                 game_id=game.id, questions=question_list
             )
-            data = await self.app.store.tgapi.send_inline_keyboard(
-                inline_keyboard=inline_keyboard,
+            data = await self.handle_to_queue(
+                reply_markup=inline_keyboard,
                 chat_id=response.message.chat.id,
                 message_thread_id=response.message.message_thread_id,
                 text="Вопросы для выбора",
@@ -811,17 +835,6 @@ class Updater:
         reply_to_message_id: int | None = None,
         reply_markup: InlineKeyboardMarkup | None = None,
     ) -> None:
-        new_message = MessageToSend(
-            chat_id=chat_id,
-            message_thread_id=message_thread_id,
-            text=text,
-            parse_mode=parse_mode,
-            entities=entities,
-            disable_notification=disable_notification,
-            reply_to_message_id=reply_to_message_id,
-            reply_markup=reply_markup,
-        )
-        print(new_message)
         await self.app.store.send_queue.put(
             MessageToSend(
                 chat_id=chat_id,

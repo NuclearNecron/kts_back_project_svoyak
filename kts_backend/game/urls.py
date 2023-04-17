@@ -4,6 +4,8 @@ from aiohttp_cors import CorsConfig
 
 __all__ = ("register_urls",)
 
+from kts_backend.game.views import ListGames
+
 
 def register_urls(application: Application):
     from kts_backend.game.views import GetPacks
@@ -29,3 +31,5 @@ def register_urls(application: Application):
     from kts_backend.game.views import QuestionGet
 
     application.router.add_view("/question.view", QuestionGet)
+
+    application.router.add_view("/games.list", ListGames)

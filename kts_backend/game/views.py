@@ -10,7 +10,7 @@ from kts_backend.game.schemas import (
     PackSchema,
     RoundSchema,
     ThemeSchema,
-    QuestionSchema,
+    QuestionSchema, ListGamesRequestSchema, GameResponseSchema,
 )
 from kts_backend.web.app import View
 from aiohttp_apispec import (
@@ -349,3 +349,20 @@ class QuestionGet(AuthRequiredMixin, View):
                 ]
             }
         )
+
+class ListGames(AuthRequiredMixin, View):
+    @docs(
+        tags=["game"],
+        summary="list of games",
+        description="list games with given parameters with pagination",
+    )
+    @request_schema(ListGamesRequestSchema)
+    @response_schema(OkResponseSchema)
+    async def get(self):
+        games = await self.request.app.store.game.list_games(
+            offset=self.data["games_on_page"] * (self.data["page"] - 1),
+            limit=self.data["games_on_page"],
+        )
+        if games:
+            return json_response(data=GameResponseSchema(many=True).dump(games))
+        return json_response(data={})

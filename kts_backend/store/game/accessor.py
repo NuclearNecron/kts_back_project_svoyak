@@ -407,7 +407,7 @@ class GameAccessor(BaseAccessor):
             return None
 
     async def change_game_status(
-        self, game_id: int, status: str
+        self, game_id: int, status: str, time: datetime|None = None
     ) -> bool | None:
         try:
             async with self.app.database.session() as session:
@@ -415,11 +415,18 @@ class GameAccessor(BaseAccessor):
                 res = await session.scalars(sq)
                 game = res.one_or_none()
                 if game:
-                    upd_query = (
-                        update(GameModel)
-                        .where(GameModel.id == game_id)
-                        .values(state=status)
-                    )
+                    if not time:
+                        upd_query = (
+                            update(GameModel)
+                            .where(GameModel.id == game_id)
+                            .values(state=status)
+                        )
+                    else:
+                        upd_query = (
+                            update(GameModel)
+                            .where(GameModel.id == game_id)
+                            .values(state=status, ended_at=time)
+                        )
                     await session.execute(upd_query)
                     await session.commit()
                     return True
@@ -920,5 +927,39 @@ class GameAccessor(BaseAccessor):
                     return True
                 else:
                     return False
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def get_answers(self, question_id: int) -> list[AnswersDC] | None:
+        try:
+            async with self.app.database.session() as session:
+                query = (
+                    select(AnswersModel)
+                    .where(AnswersModel.question_id == question_id)
+                )
+                res = await session.scalars(query)
+                asnw = res.all()
+                if asnw:
+                    return [answer.to_dc() for answer in asnw]
+                else:
+                    return None
+        except sqlalchemy.exc.IntegrityError:
+            return None
+
+    async def list_games(
+            self, offset: int, limit: int
+    ) -> list[GameDC] | None:
+        try:
+            async with self.app.database.session() as session:
+                q = (
+                    select(GameModel)
+                    .order_by(desc(GameModel.created_at))
+                    .offset(offset)
+                    .limit(limit)
+                )
+                res = await session.scalars(q)
+                games = res.all()
+                if games:
+                    return [game.to_dc() for game in games]
         except sqlalchemy.exc.IntegrityError:
             return None

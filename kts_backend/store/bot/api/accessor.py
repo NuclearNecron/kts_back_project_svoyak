@@ -94,28 +94,6 @@ class TGApi(BaseAccessor):
             self.app.logger.info(f"Sender: Получил ответ в виде {data}")
             return data
 
-    async def send_inline_keyboard(
-        self,
-        inline_keyboard: InlineKeyboardMarkup,
-        text: str,
-        chat_id: str | int,
-        message_thread_id: int | None = None,
-    ):
-        self.app.logger.info(
-            "Sender: Получено сообщение с экранной клавиатурой"
-        )
-        message = MessageToSend(
-            chat_id=chat_id,
-            message_thread_id=message_thread_id,
-            text=text,
-            parse_mode=None,
-            entities=None,
-            disable_notification=False,
-            reply_to_message_id=None,
-            reply_markup=inline_keyboard,
-        )
-        data = await self.send_message(message)
-        return data
 
     async def answerCallbackQuery(self, answer: answerCallbackQuery):
         url = self.build_url(
