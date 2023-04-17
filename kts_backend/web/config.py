@@ -10,9 +10,8 @@ __all__ = ("Config", "setup_config")
 
 
 @dataclass
-class VKBotConfig:
-    token: str
-    group_id: int
+class SessionConfig:
+    key: str
 
 
 @dataclass
@@ -31,9 +30,9 @@ class DatabaseConfig:
 
 @dataclass
 class Config:
-    vkbot: VKBotConfig = None
     tgbot: TGBotConfig = None
     database: DatabaseConfig = None
+    session: SessionConfig | None = None
 
 
 def setup_config(app: "Application", config_path: str):
@@ -41,9 +40,8 @@ def setup_config(app: "Application", config_path: str):
         raw_config = yaml.safe_load(f)
 
     app.config = Config(
-        vkbot=VKBotConfig(
-            token=raw_config["bot"]["vk"]["token"],
-            group_id=raw_config["bot"]["vk"]["group_id"],
+        session=SessionConfig(
+            key=raw_config["session"]["key"],
         ),
         tgbot=TGBotConfig(
             token=raw_config["bot"]["tg"]["token"],

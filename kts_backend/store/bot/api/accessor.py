@@ -1,14 +1,18 @@
+import json
 from typing import Optional, TYPE_CHECKING
 from aiohttp import ClientSession
 
 from kts_backend.base.base_accessor import BaseAccessor
 from kts_backend.store.bot.api.dataclasses import (
-    Update,
-    Message,
-    Author,
-    Chat,
+    MessageToSend,
+    InlineKeyboardMarkup,
+    answerCallbackQuery,
 )
 from kts_backend.store.bot.api.poller import Poller
+from kts_backend.store.bot.api.schemes import (
+    MessageToSendSchema,
+    answerCallbackQuerySchema,
+)
 from kts_backend.store.bot.api.sender import Sender
 
 TELEGRAM_HOST = "https://api.telegram.org"
@@ -27,10 +31,10 @@ class TGApi(BaseAccessor):
 
     async def connect(self, app: "Application"):
         self.client = ClientSession()
-        self.poller = Poller(self.app.store)
+        self.poller = Poller(self.app)
         self.token = self.app.config.tgbot.token
         await self.poller.start()
-        self.sender = Sender(self.app.store)
+        self.sender = Sender(self.app)
         await self.sender.start()
 
     async def disconnect(self, app: "Application"):
@@ -41,71 +45,63 @@ class TGApi(BaseAccessor):
 
     def build_url(self, method: str, params: Optional[dict] = None):
         url = TELEGRAM_HOST + "/bot" + self.token + "/" + method + "?"
-        url += "&".join([f"{param}={value}" for param, value in params.items()])
+        url += "&".join(
+            [
+                f"{param}={value}"
+                for param, value in params.items()
+                if value
+                and param != "allowed_updates"
+                and param != "reply_markup"
+            ]
+        )
+        if "reply_markup" in params and params["reply_markup"]:
+            url += "&reply_markup=" + json.dumps(params["reply_markup"])
+        if "allowed_updates" in params and len(params["allowed_updates"]) > 0:
+            url += "&allowed_updates=" + ",".join(params["allowed_updates"])
         return url
 
     async def poll(self, offset: Optional[int] = None, timeout: int = 0):
-        params = {}
+        params = {"limit": 50, "allowed_updates": []}
         if offset:
             params["offset"] = offset
         if timeout:
             params["timeout"] = timeout
         url = self.build_url("getUpdates", params=params)
-        print("start listening")
         async with self.client.get(url) as response:
-            print("receive update")
             data = await response.json()
-            updatedata = data["result"]
-            print("start format")
             try:
-                res = [
-                    Update(
-                        update_id=update["update_id"],
-                        message=Message(
-                            mess_id=update["message"]["message_id"],
-                            author=Author(
-                                id=update["message"]["from"]["id"],
-                                first_name=update["message"]["from"][
-                                    "first_name"
-                                ],
-                                last_name=update["message"]["from"]["last_name"]
-                                if "key" in update["message"]["from"]
-                                else None,
-                                username=update["message"]["from"]["username"],
-                            ),
-                            chat=Chat(
-                                id=update["message"]["chat"]["id"],
-                                type=update["message"]["chat"]["type"],
-                                first_name=update["message"]["chat"][
-                                    "first_name"
-                                ],
-                                last_name=update["message"]["chat"]["last_name"]
-                                if "key" in update["message"]["chat"]
-                                else None,
-                                username=update["message"]["chat"]["username"],
-                                title=update["message"]["chat"]["title"]
-                                if "key" in update["message"]["chat"]
-                                else None,
-                            ),
-                            date=update["message"]["date"],
-                            text=update["message"]["text"],
-                        ),
-                    )
-                    for update in updatedata
-                ]
+                updatedata = data["result"]
+                return {
+                    "updates": updatedata,
+                    "new_offset": updatedata[-1]["update_id"] + 1,
+                }
+            except IndexError:
+                self.logger.info("Poller: Новых сообщений не было получено")
+                return {"updates": [], "new_offset": offset}
             except Exception as inst:
-                print(type(inst))  # the exception instance
-                print(inst.args)  # arguments stored in .args
-                print(inst)
-            print(res)
-            return res
+                self.logger.error(
+                    "Poller: Была получена ошибка:", exc_info=inst
+                )
 
-    async def send_message(self, chat_id: int, text: str):
-        params = {
-            "chat_id": chat_id,
-            "text": text,
-        }
-        print(params)
+    async def send_message(self, message: MessageToSend):
+        params = MessageToSendSchema().dump(message)
+        self.app.logger.info(
+            f"Sender: Отправляю сообщение с содержимым {params}"
+        )
         url = self.build_url("sendMessage", params)
         async with self.client.get(url) as response:
             data = await response.json()
+            self.app.logger.info(f"Sender: Получил ответ в виде {data}")
+            return data
+
+
+    async def answerCallbackQuery(self, answer: answerCallbackQuery):
+        url = self.build_url(
+            method="answerCallbackQuery",
+            params=answerCallbackQuerySchema().dump(answer),
+        )
+        self.app.logger.info(f"Sender: Отправляю ответ с содержимым {answer}")
+        async with self.client.get(url) as response:
+            data = await response.json()
+            self.app.logger.info(f"Sender: Получил ответ в виде {data}")
+            return data

@@ -6,7 +6,8 @@ sentry:
   dsn:
   env: dev
 
-store: {}
+session:
+  key: CaY5iCkYtN7DqXdiYK1BvmGrQuaSA4Tl4bEk9my0jc0=
 
 database:
   host: localhost
@@ -16,8 +17,5 @@ database:
   database: gamedatabase
 
 bot:
-  vk:
-    token: vk1.a.ZSqfruu-C6HWYaeCEt9wOxydXZWgHGPgbM7V2D-g6NJ0Kh42llmVry4POwD9QUb9YhD96IeyMf9wyRZwUPeBDvFIrLJGSIbSwfresBaadq9us3d0tCf7oXahirYbWWBtJ9B4tB0I3sg6ev61dRsBVJfKgMbrWyYfxFhu1kuMTgMkTAkKt5PbuN5OtPBynsN3GcEqi3Fc4Kilq8Jx1udbPQ
-    group_id: 218958818
   tg:
     token: 6078553823:AAF2xgT7Gqbtif7KWcREOkjJH7nzfmY3ILE
